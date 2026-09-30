@@ -1,0 +1,9 @@
+val age : int = 25
+val pi : float = 3.14159
+const status : bool = true
+const msg : string = "nigga"
+
+println(msg)
+println(age)
+println(pi)
+println(status)

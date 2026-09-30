@@ -1,0 +1,14 @@
+{
+  "iconDefinitions": {
+    "_vamp_file": {
+      "iconPath": "./vamp-icon.png"
+    },
+    "_default_file": {
+      "iconPath": "./vamp-icon.png"
+    }
+  },
+  "file": "_default_file",
+  "fileExtensions": {
+    "vp": "_vamp_file"
+  }
+}
