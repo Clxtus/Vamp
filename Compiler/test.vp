@@ -1,9 +1,5 @@
-val age : int = 25
-val pi : float = 3.14159
-const status : bool = true
-const msg : string = "nigga"
+val x : int = 2
+val y : int = 5
 
-println(msg)
-println(age)
-println(pi)
-println(status)
+print("x + y = ")
+print(x+y)
