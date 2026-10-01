@@ -1,5 +1,17 @@
-val x : int = 2
-val y : int = 5
+import os
 
-print("x + y = ")
-print(x+y)
+val a : int = int("100")
+val b : float = float(a)
+val c : bool = bool("true")
+val d : str = str(c)
+
+print("Status: ")
+println(d)
+
+val msg : str = "Value is: " + str(b)
+println(msg)
+
+os.Make_Directory("C:/Users/sara's pc/Desktop/VampTestFolder")
+println("Created VampTestFolder successfully!")
+
+exit(0)

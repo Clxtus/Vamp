@@ -1,9 +1,10 @@
-# Compiler/lexer.py
 import re
 
 TOKEN_TYPES = [
+    ("IMPORT", r"\bimport\b"),
     ("KEYWORD", r"\b(val|const)\b"),
-    ("TYPE", r"\b(int|float|bool|string)\b"),
+    ("CAST", r"\b(int|str|float|bool)(?=\s*\()"),
+    ("TYPE", r"\b(int|float|bool|str)\b"),
     ("BOOL", r"\b(true|false)\b"),
     ("IDENTIFIER", r"\b[a-zA-Z_][a-zA-Z0-9_]*\b"),
     ("FLOAT_LITERAL", r"\b\d+\.\d+\b"),
@@ -13,6 +14,7 @@ TOKEN_TYPES = [
     ("LPAREN", r"\("),
     ("RPAREN", r"\)"),
     ("COLON", r":"),
+    ("DOT", r"\."),
     ("SKIP", r"[ \t\r\n]+"),
 ]
 

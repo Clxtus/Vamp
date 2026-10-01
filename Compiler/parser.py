@@ -1,7 +1,20 @@
-# Compiler/parser.py
-
 class ASTNode:
     pass
+
+class ImportFileNode(ASTNode):
+    def __init__(self, alias, filepath):
+        self.alias = alias
+        self.filepath = filepath
+
+class ImportLibNode(ASTNode):
+    def __init__(self, lib_name):
+        self.lib_name = lib_name
+
+class LibCallNode(ASTNode):
+    def __init__(self, lib_name, method, args):
+        self.lib_name = lib_name
+        self.method = method
+        self.args = args
 
 class VariableDeclNode(ASTNode):
     def __init__(self, is_const, name, var_type, value_node):
@@ -10,9 +23,18 @@ class VariableDeclNode(ASTNode):
         self.var_type = var_type
         self.value_node = value_node
 
-class PrintlnNode(ASTNode):
-    def __init__(self, expr_node):
+class PrintNode(ASTNode):
+    def __init__(self, expr_node, newline=True):
         self.expr_node = expr_node
+        self.newline = newline
+
+class ExitNode(ASTNode):
+    def __init__(self, code_node):
+        self.code_node = code_node
+
+class FreeNode(ASTNode):
+    def __init__(self, ptr_node):
+        self.ptr_node = ptr_node
 
 class LiteralNode(ASTNode):
     def __init__(self, type_, value):
@@ -28,6 +50,11 @@ class BinaryOpNode(ASTNode):
         self.left = left
         self.op = op
         self.right = right
+
+class CastNode(ASTNode):
+    def __init__(self, target_type, expr_node):
+        self.target_type = target_type
+        self.expr_node = expr_node
 
 class Parser:
     def __init__(self, tokens):
@@ -56,16 +83,56 @@ class Parser:
 
     def parse_statement(self):
         token = self.peek()
-        if token.type == "KEYWORD" and token.value in ("val", "const"):
+        
+        # import handling
+        if token.type == "IMPORT":
+            self.consume("IMPORT")
+            first_ident = self.consume("IDENTIFIER").value
+            if self.peek() and self.peek().type == "COLON":
+                self.consume("COLON")
+                filepath = self.consume("STRING_LITERAL").value[1:-1]
+                return ImportFileNode(first_ident, filepath)
+            else:
+                return ImportLibNode(first_ident)
+
+        elif token.type == "KEYWORD" and token.value in ("val", "const"):
             return self.parse_var_decl()
-        elif token.type == "IDENTIFIER" and token.value in ("println", "print"):
-            self.consume("IDENTIFIER")
-            self.consume("LPAREN")
-            expr = self.parse_expression()
-            self.consume("RPAREN")
-            return PrintlnNode(expr)
-        else:
-            raise SyntaxError(f"Unsupported statement: {token}")
+
+        elif token.type == "IDENTIFIER":
+            # Check for library call: os.Make_Directory(...)
+            if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].type == "DOT":
+                lib_name = self.consume("IDENTIFIER").value
+                self.consume("DOT")
+                meth = self.consume("IDENTIFIER").value
+                self.consume("LPAREN")
+                args = []
+                if self.peek() and self.peek().type != "RPAREN":
+                    args.append(self.parse_expression())
+                self.consume("RPAREN")
+                return LibCallNode(lib_name, meth, args)
+
+            # Built-in statement calls
+            if token.value in ("println", "print"):
+                is_println = token.value == "println"
+                self.consume("IDENTIFIER")
+                self.consume("LPAREN")
+                expr = self.parse_expression()
+                self.consume("RPAREN")
+                return PrintNode(expr, newline=is_println)
+            elif token.value == "exit":
+                self.consume("IDENTIFIER")
+                self.consume("LPAREN")
+                code = self.parse_expression()
+                self.consume("RPAREN")
+                return ExitNode(code)
+            elif token.value == "free":
+                self.consume("IDENTIFIER")
+                self.consume("LPAREN")
+                ptr = self.parse_expression()
+                self.consume("RPAREN")
+                return FreeNode(ptr)
+
+        raise SyntaxError(f"Unsupported statement: {token}")
 
     def parse_var_decl(self):
         kw = self.consume("KEYWORD").value
@@ -77,7 +144,6 @@ class Parser:
         value_node = self.parse_expression()
         return VariableDeclNode(is_const, name, var_type, value_node)
 
-    # Expression Parser with Precedence
     def parse_expression(self):
         return self.parse_additive()
 
@@ -99,7 +165,13 @@ class Parser:
 
     def parse_primary(self):
         token = self.peek()
-        if token.type == "LPAREN":
+        if token.type == "CAST":
+            tgt_ty = self.consume("CAST").value
+            self.consume("LPAREN")
+            expr = self.parse_expression()
+            self.consume("RPAREN")
+            return CastNode(tgt_ty, expr)
+        elif token.type == "LPAREN":
             self.consume("LPAREN")
             expr = self.parse_expression()
             self.consume("RPAREN")
@@ -111,8 +183,19 @@ class Parser:
         elif token.type == "BOOL":
             return LiteralNode("bool", self.consume().value == "true")
         elif token.type == "STRING_LITERAL":
-            return LiteralNode("string", self.consume().value[1:-1])
+            return LiteralNode("str", self.consume().value[1:-1])
         elif token.type == "IDENTIFIER":
+            # Check for library call in expression context (e.g., Directory.exists("path"))
+            if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].type == "DOT":
+                lib_name = self.consume("IDENTIFIER").value
+                self.consume("DOT")
+                meth = self.consume("IDENTIFIER").value
+                self.consume("LPAREN")
+                args = []
+                if self.peek() and self.peek().type != "RPAREN":
+                    args.append(self.parse_expression())
+                self.consume("RPAREN")
+                return LibCallNode(lib_name, meth, args)
             return VarAccessNode(self.consume().value)
         else:
             raise SyntaxError(f"Unexpected token in expression: {token}")
