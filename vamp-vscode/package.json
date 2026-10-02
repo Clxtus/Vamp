@@ -1,36 +1,29 @@
 {
   "name": "vamp-lang",
-  "displayName": "Vamp Language Support",
+  "displayName": "Vamp Language",
   "version": "1.0.0",
-  "publisher": "Clxtus",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.70.0"
   },
+  "activationEvents": [
+    "onLanguage:vamp"
+  ],
   "categories": [
     "Programming Languages"
   ],
-  "icon": "vamp-icon.jpg",
   "contributes": {
     "languages": [
       {
-        "id": "vp",
-        "aliases": ["Vamp", "vp"],
-        "extensions": [".vp"],
-        "configuration": "./language-configuration.json"
+        "id": "vamp",
+        "aliases": ["Vamp", "vamp"],
+        "extensions": [".vp"]
       }
     ],
     "grammars": [
       {
-        "language": "vp",
+        "language": "vamp",
         "scopeName": "source.vp",
         "path": "./syntaxes/vp.tmLanguage.json"
-      }
-    ],
-    "iconThemes": [
-      {
-        "id": "vamp-icons",
-        "label": "Vamp Icons",
-        "path": "./icon-theme.json"
       }
     ]
   }

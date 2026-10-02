@@ -1,4 +1,3 @@
-# Compiler/main.py
 import sys
 import os
 import subprocess
@@ -7,19 +6,17 @@ from parser import Parser
 from codegen import LLVMCodeGenerator
 
 def get_clang_path():
-    # 1. PyInstaller bundle
+
     if getattr(sys, 'frozen', False):
         bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
         bundled_clang = os.path.join(bundle_dir, "clang.exe")
         if os.path.exists(bundled_clang):
             return bundled_clang
 
-    # 2. Local directory
     local_clang = os.path.join(os.path.dirname(__file__), "clang.exe")
     if os.path.exists(local_clang):
         return local_clang
 
-    # 3. Explicit LLVM default installation locations on Windows
     known_paths = [
         r"C:\Program Files\LLVM\bin\clang.exe",
         r"C:\Program Files (x86)\LLVM\bin\clang.exe",
@@ -28,7 +25,6 @@ def get_clang_path():
         if os.path.exists(path):
             return path
 
-    # 4. Fallback to system PATH
     return "clang"
 
 def compile_file(source_filepath):

@@ -1,6 +1,6 @@
 import re
 
-TOKEN_TYPES = [
+TOKEN_PATTERNS = [
     ("IMPORT", r"\bimport\b"),
     ("KEYWORD", r"\b(val|const)\b"),
     ("CAST", r"\b(int|str|float|bool)(?=\s*\()"),
@@ -13,33 +13,37 @@ TOKEN_TYPES = [
     ("OPERATOR", r"[\+\-\*/=]"),
     ("LPAREN", r"\("),
     ("RPAREN", r"\)"),
+    ("LBRACE", r"\{"),
+    ("RBRACE", r"\}"),
     ("COLON", r":"),
+    ("COMMA", r","),
+    ("SEMICOLON", r";"),
     ("DOT", r"\."),
     ("SKIP", r"[ \t\r\n]+"),
 ]
 
 class Token:
-    def __init__(self, type_, value):
-        self.type = type_
-        self.value = value
+    def __init__(self, kind, text):
+        self.kind = kind
+        self.text = text
 
     def __repr__(self):
-        return f"Token({self.type}, {self.value})"
+        return f"Token({self.kind}, {self.text})"
 
-def tokenize(source_code):
+def tokenize(source):
     tokens = []
     pos = 0
-    while pos < len(source_code):
+    while pos < len(source):
         match = None
-        for type_, regex in TOKEN_TYPES:
-            pat = re.compile(regex)
-            match = pat.match(source_code, pos)
+        for kind, regex_pattern in TOKEN_PATTERNS:
+            pat = re.compile(regex_pattern)
+            match = pat.match(source, pos)
             if match:
-                value = match.group(0)
-                if type_ != "SKIP":
-                    tokens.append(Token(type_, value))
+                text = match.group(0)
+                if kind != "SKIP":
+                    tokens.append(Token(kind, text))
                 pos = match.end()
                 break
         if not match:
-            raise SyntaxError(f"Unexpected character: {source_code[pos]} at index {pos}")
+            raise SyntaxError(f"Unexpected character: {source[pos]} at index {pos}")
     return tokens

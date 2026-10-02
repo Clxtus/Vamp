@@ -1,272 +1,321 @@
 from llvmlite import ir
-from parser import LiteralNode, ImportLibNode, ImportFileNode, LibCallNode
+from parser import LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode
 
 class LLVMCodeGenerator:
     def __init__(self):
         self.module = ir.Module(name="vamp_module")
         self.builder = None
-        self.symbol_table = {}
-        self.type_table = {}
-        self.imported_libs = set()
-        self.str_count = 0  # Global unique string counter
+        self.variable_pointers = {}
+        self.type_information = {}
+        self.imported_libraries = set()
+        self.string_literal_count = 0
 
-        # LLVM Types
-        self.i32_t = ir.IntType(32)
-        self.float_t = ir.FloatType()
-        self.i1_t = ir.IntType(1)
-        self.i8ptr_t = ir.IntType(8).as_pointer()
+        self.int32_type = ir.IntType(32)
+        self.float_type = ir.FloatType()
+        self.bool_type = ir.IntType(1)
+        self.char_pointer_type = ir.IntType(8).as_pointer()
 
-        # C Runtime Function Declarations
-        printf_ty = ir.FunctionType(self.i32_t, [self.i8ptr_t], var_arg=True)
-        self.printf = ir.Function(self.module, printf_ty, name="printf")
+        printf_type = ir.FunctionType(self.int32_type, [self.char_pointer_type], var_arg=True)
+        self.printf_function = ir.Function(self.module, printf_type, name="printf")
 
-        snprintf_ty = ir.FunctionType(self.i32_t, [self.i8ptr_t, self.i32_t, self.i8ptr_t], var_arg=True)
-        self.snprintf = ir.Function(self.module, snprintf_ty, name="snprintf")
+        snprintf_type = ir.FunctionType(self.int32_type, [self.char_pointer_type, self.int32_type, self.char_pointer_type], var_arg=True)
+        self.snprintf_function = ir.Function(self.module, snprintf_type, name="snprintf")
 
-        malloc_ty = ir.FunctionType(self.i8ptr_t, [self.i32_t])
-        self.malloc_fn = ir.Function(self.module, malloc_ty, name="malloc")
+        malloc_type = ir.FunctionType(self.char_pointer_type, [self.int32_type])
+        self.malloc_function = ir.Function(self.module, malloc_type, name="malloc")
 
-        strlen_ty = ir.FunctionType(self.i32_t, [self.i8ptr_t])
-        self.strlen_fn = ir.Function(self.module, strlen_ty, name="strlen")
+        strlen_type = ir.FunctionType(self.int32_type, [self.char_pointer_type])
+        self.strlen_function = ir.Function(self.module, strlen_type, name="strlen")
 
-        strcpy_ty = ir.FunctionType(self.i8ptr_t, [self.i8ptr_t, self.i8ptr_t])
-        self.strcpy_fn = ir.Function(self.module, strcpy_ty, name="strcpy")
+        strcpy_type = ir.FunctionType(self.char_pointer_type, [self.char_pointer_type, self.char_pointer_type])
+        self.strcpy_function = ir.Function(self.module, strcpy_type, name="strcpy")
 
-        strcat_ty = ir.FunctionType(self.i8ptr_t, [self.i8ptr_t, self.i8ptr_t])
-        self.strcat_fn = ir.Function(self.module, strcat_ty, name="strcat")
+        strcat_type = ir.FunctionType(self.char_pointer_type, [self.char_pointer_type, self.char_pointer_type])
+        self.strcat_function = ir.Function(self.module, strcat_type, name="strcat")
 
-        atoi_ty = ir.FunctionType(self.i32_t, [self.i8ptr_t])
-        self.atoi_fn = ir.Function(self.module, atoi_ty, name="atoi")
+        atoi_type = ir.FunctionType(self.int32_type, [self.char_pointer_type])
+        self.atoi_function = ir.Function(self.module, atoi_type, name="atoi")
 
-        atof_ty = ir.FunctionType(ir.DoubleType(), [self.i8ptr_t])
-        self.atof_fn = ir.Function(self.module, atof_ty, name="atof")
+        atof_type = ir.FunctionType(ir.DoubleType(), [self.char_pointer_type])
+        self.atof_function = ir.Function(self.module, atof_type, name="atof")
 
-        strcmp_ty = ir.FunctionType(self.i32_t, [self.i8ptr_t, self.i8ptr_t])
-        self.strcmp_fn = ir.Function(self.module, strcmp_ty, name="strcmp")
+        strcmp_type = ir.FunctionType(self.int32_type, [self.char_pointer_type, self.char_pointer_type])
+        self.strcmp_function = ir.Function(self.module, strcmp_type, name="strcmp")
 
-        exit_ty = ir.FunctionType(ir.VoidType(), [self.i32_t])
-        self.exit_fn = ir.Function(self.module, exit_ty, name="exit")
+        exit_type = ir.FunctionType(ir.VoidType(), [self.int32_type])
+        self.exit_function = ir.Function(self.module, exit_type, name="exit")
 
-        free_ty = ir.FunctionType(ir.VoidType(), [self.i8ptr_t])
-        self.free_fn = ir.Function(self.module, free_ty, name="free")
+        free_type = ir.FunctionType(ir.VoidType(), [self.char_pointer_type])
+        self.free_function = ir.Function(self.module, free_type, name="free")
 
-        sh_mkdir_ty = ir.FunctionType(self.i32_t, [self.i8ptr_t, self.i8ptr_t, self.i8ptr_t])
-        self.sh_mkdir_fn = ir.Function(self.module, sh_mkdir_ty, name="SHCreateDirectoryExA")
+        create_directory_type = ir.FunctionType(self.int32_type, [self.char_pointer_type, self.char_pointer_type, self.char_pointer_type])
+        self.create_directory_function = ir.Function(self.module, create_directory_type, name="SHCreateDirectoryExA")
 
-    def generate_code(self, ast):
-        main_ty = ir.FunctionType(self.i32_t, [])
-        main_func = ir.Function(self.module, main_ty, name="main")
-        block = main_func.append_basic_block(name="entry")
-        self.builder = ir.IRBuilder(block)
+    def generate_code(self, program):
+        main_type = ir.FunctionType(self.int32_type, [])
+        main_function = ir.Function(self.module, main_type, name="main")
+        entry_block = main_function.append_basic_block(name="entry")
+        self.builder = ir.IRBuilder(entry_block)
 
-        for stmt in ast:
+        for stmt in program:
             self.visit(stmt)
 
-        self.builder.ret(ir.Constant(self.i32_t, 0))
+        self.builder.ret(ir.Constant(self.int32_type, 0))
         return str(self.module)
 
     def visit(self, node):
-        meth_name = f"visit_{type(node).__name__}"
-        visitor = getattr(self, meth_name, self.generic_visit)
+        visitor_name = f"visit_{type(node).__name__}"
+        visitor = getattr(self, visitor_name, self.visit_unhandled_node)
         return visitor(node)
 
-    def generic_visit(self, node):
+    def visit_unhandled_node(self, node):
         raise NotImplementedError(f"No visit_{type(node).__name__} method defined.")
 
-    def visit_ImportLibNode(self, node):
-        self.imported_libs.add(node.lib_name)
+    def visit_LibraryImportNode(self, node):
+        self.imported_libraries.add(node.library_name)
 
     def visit_ImportFileNode(self, node):
         pass
 
-    def visit_LibCallNode(self, node):
-        if node.lib_name == "os" and "os" not in self.imported_libs:
+    def visit_LibraryCallNode(self, node):
+        if node.library_name == "os" and "os" not in self.imported_libraries:
             raise NameError("Library 'os' is not imported. Add 'import os' at top of file.")
 
-        if node.lib_name == "os":
-            if node.method == "Make_Directory":
-                path_val, path_type = self.visit(node.args[0])
+        if node.library_name == "os":
+            if node.method_name == "Make_Directory":
+                path_value, path_type = self.visit(node.arguments[0])
                 if path_type != "str":
                     raise TypeError("os.Make_Directory expected string path")
-                null_ptr = ir.Constant(self.i8ptr_t, None)
-                res = self.builder.call(self.sh_mkdir_fn, [null_ptr, path_val, null_ptr])
+                null_pointer = ir.Constant(self.char_pointer_type, None)
+                res = self.builder.call(self.create_directory_function, [null_pointer, path_value, null_pointer])
                 return res, "int"
 
-        elif node.lib_name == "Directory" and node.method == "exists":
-            path_val, _ = self.visit(node.args[0])
-            null_ptr = ir.Constant(self.i8ptr_t, None)
-            res = self.builder.call(self.sh_mkdir_fn, [null_ptr, path_val, null_ptr])
-            is_exists = self.builder.icmp_signed("==", res, ir.Constant(self.i32_t, -1))
-            return is_exists, "bool"
+        elif node.library_name == "Directory" and node.method_name == "exists":
+            path_value, _ = self.visit(node.arguments[0])
+            null_pointer = ir.Constant(self.char_pointer_type, None)
+            res = self.builder.call(self.create_directory_function, [null_pointer, path_value, null_pointer])
+            exists = self.builder.icmp_signed("==", res, ir.Constant(self.int32_type, -1))
+            return exists, "bool"
 
-        raise NotImplementedError(f"Method '{node.lib_name}.{node.method}' is not implemented.")
+        raise NotImplementedError(f"Method '{node.library_name}.{node.method_name}' is not implemented.")
 
     def visit_LiteralNode(self, node):
-        if node.type == "int":
-            return ir.Constant(self.i32_t, node.value), "int"
-        elif node.type == "float":
-            return ir.Constant(self.float_t, node.value), "float"
-        elif node.type == "bool":
-            return ir.Constant(self.i1_t, 1 if node.value else 0), "bool"
-        elif node.type == "str":
-            text = node.value + "\0"
-            c_str = ir.Constant(ir.ArrayType(ir.IntType(8), len(text)), bytearray(text.encode("utf-8")))
-            self.str_count += 1
-            global_str = ir.GlobalVariable(self.module, c_str.type, name=f".str_{self.str_count}")
-            global_str.linkage = "internal"
-            global_str.initializer = c_str
-            return self.builder.bitcast(global_str, self.i8ptr_t), "str"
+        if node.literal_type == "int":
+            return ir.Constant(self.int32_type, node.value), "int"
+        elif node.literal_type == "float":
+            return ir.Constant(self.float_type, node.value), "float"
+        elif node.literal_type == "bool":
+            return ir.Constant(self.bool_type, 1 if node.value else 0), "bool"
+        elif node.literal_type == "str":
+            string_content = node.value + "\0"
+            string_constant = ir.Constant(ir.ArrayType(ir.IntType(8), len(string_content)), bytearray(string_content.encode("utf-8")))
+            self.string_literal_count += 1
+            string_global = ir.GlobalVariable(self.module, string_constant.type, name=f".str_{self.string_literal_count}")
+            string_global.linkage = "internal"
+            string_global.initializer = string_constant
+            return self.builder.bitcast(string_global, self.char_pointer_type), "str"
 
-    def visit_VarAccessNode(self, node):
-        ptr = self.symbol_table[node.name]
-        var_type = self.type_table[node.name]
-        val = self.builder.load(ptr, name=f"{node.name}_val")
-        return val, var_type
+    def visit_VariableAccessNode(self, node):
+        variable_pointer = self.variable_pointers[node.variable_name]
+        variable_type = self.type_information[node.variable_name]
+        value = self.builder.load(variable_pointer, name=f"{node.variable_name}_value")
+        return value, variable_type
 
     def visit_BinaryOpNode(self, node):
-        left_val, lhs_ty = self.visit(node.left)
-        right_val, rhs_ty = self.visit(node.right)
+        lhs, lhs_ty = self.visit(node.left)
+        rhs, rhs_ty = self.visit(node.right)
 
-        # String Concatenation: "Hello " + x
         if lhs_ty == "str" or rhs_ty == "str":
             if lhs_ty != "str":
-                left_val, _ = self.visit_CastNode(type("Cast", (), {"expr_node": node.left, "target_type": "str"})())
+                lhs, _ = self.visit_CastNode(type("Cast", (), {"expression": node.left, "target_type": "str"})())
             if rhs_ty != "str":
-                right_val, _ = self.visit_CastNode(type("Cast", (), {"expr_node": node.right, "target_type": "str"})())
+                rhs, _ = self.visit_CastNode(type("Cast", (), {"expression": node.right, "target_type": "str"})())
 
-            len1 = self.builder.call(self.strlen_fn, [left_val])
-            len2 = self.builder.call(self.strlen_fn, [right_val])
-            total_len = self.builder.add(self.builder.add(len1, len2), ir.Constant(self.i32_t, 1))
+            left_length = self.builder.call(self.strlen_function, [lhs])
+            right_length = self.builder.call(self.strlen_function, [rhs])
+            buffer_length = self.builder.add(self.builder.add(left_length, right_length), ir.Constant(self.int32_type, 1))
 
-            buf = self.builder.call(self.malloc_fn, [total_len], name="str_cat_buf")
-            self.builder.call(self.strcpy_fn, [buf, left_val])
-            self.builder.call(self.strcat_fn, [buf, right_val])
+            buf = self.builder.call(self.malloc_function, [buffer_length], name="string_concat_buffer")
+            self.builder.call(self.strcpy_function, [buf, lhs])
+            self.builder.call(self.strcat_function, [buf, rhs])
             return buf, "str"
 
         if lhs_ty != rhs_ty:
-            raise TypeError(f"Type mismatch: {lhs_ty} {node.op} {rhs_ty}")
+            raise TypeError(f"Type mismatch: {lhs_ty} {node.operator} {rhs_ty}")
 
         if lhs_ty == "int":
-            if node.op == "+": return self.builder.add(left_val, right_val, name="addtmp"), "int"
-            elif node.op == "-": return self.builder.sub(left_val, right_val, name="subtmp"), "int"
-            elif node.op == "*": return self.builder.mul(left_val, right_val, name="multmp"), "int"
-            elif node.op == "/": return self.builder.sdiv(left_val, right_val, name="divtmp"), "int"
+            if node.operator == "+": return self.builder.add(lhs, rhs, name="addtmp"), "int"
+            elif node.operator == "-": return self.builder.sub(lhs, rhs, name="subtmp"), "int"
+            elif node.operator == "*": return self.builder.mul(lhs, rhs, name="multmp"), "int"
+            elif node.operator == "/": return self.builder.sdiv(lhs, rhs, name="divtmp"), "int"
         elif lhs_ty == "float":
-            if node.op == "+": return self.builder.fadd(left_val, right_val, name="faddtmp"), "float"
-            elif node.op == "-": return self.builder.fsub(left_val, right_val, name="fsubtmp"), "float"
-            elif node.op == "*": return self.builder.fmul(left_val, right_val, name="fmultmp"), "float"
-            elif node.op == "/": return self.builder.fdiv(left_val, right_val, name="fdivtmp"), "float"
+            if node.operator == "+": return self.builder.fadd(lhs, rhs, name="faddtmp"), "float"
+            elif node.operator == "-": return self.builder.fsub(lhs, rhs, name="fsubtmp"), "float"
+            elif node.operator == "*": return self.builder.fmul(lhs, rhs, name="fmultmp"), "float"
+            elif node.operator == "/": return self.builder.fdiv(lhs, rhs, name="fdivtmp"), "float"
 
-        raise SyntaxError(f"Unsupported binary operator '{node.op}' for type '{lhs_ty}'")
+        raise SyntaxError(f"Unsupported binary operator '{node.operator}' for type '{lhs_ty}'")
 
     def visit_CastNode(self, node):
-        val, val_type = self.visit(node.expr_node)
-        target = node.target_type
+        value, val_ty = self.visit(node.expression)
+        tgt_ty = node.target_type
 
-        # 1. Identity cast (same type)
-        if val_type == target:
-            return val, target
+        if val_ty == tgt_ty:
+            return value, tgt_ty
 
-        # 2. Convert TO int
-        if target == "int":
-            if val_type == "float":
-                return self.builder.fptosi(val, self.i32_t, name="cast_int"), "int"
-            elif val_type == "bool":
-                return self.builder.zext(val, self.i32_t, name="cast_int"), "int"
-            elif val_type == "str":
-                return self.builder.call(self.atoi_fn, [val], name="atoi_tmp"), "int"
+        if tgt_ty == "int":
+            if val_ty == "float":
+                return self.builder.fptosi(value, self.int32_type, name="cast_int"), "int"
+            elif val_ty == "bool":
+                return self.builder.zext(value, self.int32_type, name="cast_int"), "int"
+            elif val_ty == "str":
+                return self.builder.call(self.atoi_function, [value], name="atoi_tmp"), "int"
 
-        # 3. Convert TO float
-        elif target == "float":
-            if val_type == "int":
-                return self.builder.sitofp(val, self.float_t, name="cast_float"), "float"
-            elif val_type == "bool":
-                i32_val = self.builder.zext(val, self.i32_t, name="bool_i32")
-                return self.builder.sitofp(i32_val, self.float_t, name="cast_float"), "float"
-            elif val_type == "str":
-                f64 = self.builder.call(self.atof_fn, [val], name="atof_tmp")
-                return self.builder.fptrunc(f64, self.float_t, name="fptrunc_tmp"), "float"
+        elif tgt_ty == "float":
+            if val_ty == "int":
+                return self.builder.sitofp(value, self.float_type, name="cast_float"), "float"
+            elif val_ty == "bool":
+                integer_value = self.builder.zext(value, self.int32_type, name="bool_int")
+                return self.builder.sitofp(integer_value, self.float_type, name="cast_float"), "float"
+            elif val_ty == "str":
+                double_value = self.builder.call(self.atof_function, [value], name="atof_tmp")
+                return self.builder.fptrunc(double_value, self.float_type, name="fptrunc_tmp"), "float"
 
-        # 4. Convert TO bool
-        elif target == "bool":
-            if val_type == "int":
-                return self.builder.icmp_signed("!=", val, ir.Constant(self.i32_t, 0), name="cast_bool"), "bool"
-            elif val_type == "float":
-                return self.builder.fcmp_ordered("!=", val, ir.Constant(self.float_t, 0.0), name="cast_bool"), "bool"
-            elif val_type == "str":
-                str_true = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
-                str_one = self.visit_LiteralNode(LiteralNode("str", "1"))[0]
-                cmp_true = self.builder.call(self.strcmp_fn, [val, str_true])
-                cmp_one = self.builder.call(self.strcmp_fn, [val, str_one])
-                is_true = self.builder.icmp_signed("==", cmp_true, ir.Constant(self.i32_t, 0))
-                is_one = self.builder.icmp_signed("==", cmp_one, ir.Constant(self.i32_t, 0))
+        elif tgt_ty == "bool":
+            if val_ty == "int":
+                return self.builder.icmp_signed("!=", value, ir.Constant(self.int32_type, 0), name="cast_bool"), "bool"
+            elif val_ty == "float":
+                return self.builder.fcmp_ordered("!=", value, ir.Constant(self.float_type, 0.0), name="cast_bool"), "bool"
+            elif val_ty == "str":
+                true_string = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
+                one_string = self.visit_LiteralNode(LiteralNode("str", "1"))[0]
+                true_comparison = self.builder.call(self.strcmp_function, [value, true_string])
+                one_comparison = self.builder.call(self.strcmp_function, [value, one_string])
+                is_true = self.builder.icmp_signed("==", true_comparison, ir.Constant(self.int32_type, 0))
+                is_one = self.builder.icmp_signed("==", one_comparison, ir.Constant(self.int32_type, 0))
                 return self.builder.or_(is_true, is_one, name="cast_bool"), "bool"
 
-        # 5. Convert TO str
-        elif target == "str":
-            buf = self.builder.call(self.malloc_fn, [ir.Constant(self.i32_t, 64)], name="str_buf")
-            buf_size = ir.Constant(self.i32_t, 64)
-            if val_type == "int":
-                fmt = self.visit_LiteralNode(LiteralNode("str", "%d"))[0]
-                self.builder.call(self.snprintf, [buf, buf_size, fmt, val])
+        elif tgt_ty == "str":
+            buf = self.builder.call(self.malloc_function, [ir.Constant(self.int32_type, 64)], name="string_buffer")
+            buffer_size = ir.Constant(self.int32_type, 64)
+            if val_ty == "int":
+                format_string = self.visit_LiteralNode(LiteralNode("str", "%d"))[0]
+                self.builder.call(self.snprintf_function, [buf, buffer_size, format_string, value])
                 return buf, "str"
-            elif val_type == "float":
-                fmt = self.visit_LiteralNode(LiteralNode("str", "%f"))[0]
-                f64 = self.builder.fpext(val, ir.DoubleType())
-                self.builder.call(self.snprintf, [buf, buf_size, fmt, f64])
+            elif val_ty == "float":
+                format_string = self.visit_LiteralNode(LiteralNode("str", "%f"))[0]
+                double_value = self.builder.fpext(value, ir.DoubleType())
+                self.builder.call(self.snprintf_function, [buf, buffer_size, format_string, double_value])
                 return buf, "str"
-            elif val_type == "bool":
-                str_true = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
-                str_false = self.visit_LiteralNode(LiteralNode("str", "false"))[0]
-                res_str = self.builder.select(val, str_true, str_false)
-                return res_str, "str"  # <-- Added missing return statement here!
+            elif val_ty == "bool":
+                true_string = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
+                false_string = self.visit_LiteralNode(LiteralNode("str", "false"))[0]
+                return self.builder.select(value, true_string, false_string), "str"
 
-        raise TypeError(f"Casting from {val_type} to {target} is not supported.")
+        raise TypeError(f"Casting from {val_ty} to {tgt_ty} is not supported.")
 
-    def visit_VariableDeclNode(self, node):
-        val, val_type = self.visit(node.value_node)
-        if val_type != node.var_type:
-            raise TypeError(f"Cannot assign {val_type} to variable '{node.name}' of type {node.var_type}")
+    def visit_VariableDeclarationNode(self, node):
+        value, val_ty = self.visit(node.initializer)
+        if val_ty != node.variable_type:
+            raise TypeError(f"Cannot assign {val_ty} to variable '{node.variable_name}' of type {node.variable_type}")
 
-        if node.var_type == "int": ll_ty = self.i32_t
-        elif node.var_type == "float": ll_ty = self.float_t
-        elif node.var_type == "bool": ll_ty = self.i1_t
-        elif node.var_type == "str": ll_ty = self.i8ptr_t
+        if node.variable_type == "int": ll_ty = self.int32_type
+        elif node.variable_type == "float": ll_ty = self.float_type
+        elif node.variable_type == "bool": ll_ty = self.bool_type
+        elif node.variable_type == "str": ll_ty = self.char_pointer_type
 
-        ptr = self.builder.alloca(ll_ty, name=node.name)
-        self.builder.store(val, ptr)
-        self.symbol_table[node.name] = ptr
-        self.type_table[node.name] = node.var_type
+        variable_pointer = self.builder.alloca(ll_ty, name=node.variable_name)
+        self.builder.store(value, variable_pointer)
+        self.variable_pointers[node.variable_name] = variable_pointer
+        self.type_information[node.variable_name] = node.variable_type
 
     def visit_PrintNode(self, node):
-        val, val_type = self.visit(node.expr_node)
+        value, val_ty = self.visit(node.expression)
         end = "\n\0" if node.newline else "\0"
-        fmt = f"%s{end}" if val_type == "str" else f"%d{end}" if val_type == "int" else f"%f{end}" if val_type == "float" else f"%s{end}"
+        format_string = f"%s{end}" if val_ty == "str" else f"%d{end}" if val_ty == "int" else f"%f{end}" if val_ty == "float" else f"%s{end}"
 
-        c_str = ir.Constant(ir.ArrayType(ir.IntType(8), len(fmt)), bytearray(fmt.encode("utf-8")))
-        self.str_count += 1
-        fmt_var = ir.GlobalVariable(self.module, c_str.type, name=f".str_{self.str_count}")
-        fmt_var.linkage = "internal"
-        fmt_var.initializer = c_str
-        fmt_ptr = self.builder.bitcast(fmt_var, self.i8ptr_t)
+        format_constant = ir.Constant(ir.ArrayType(ir.IntType(8), len(format_string)), bytearray(format_string.encode("utf-8")))
+        self.string_literal_count += 1
+        format_global = ir.GlobalVariable(self.module, format_constant.type, name=f".str_{self.string_literal_count}")
+        format_global.linkage = "internal"
+        format_global.initializer = format_constant
+        format_pointer = self.builder.bitcast(format_global, self.char_pointer_type)
 
-        if val_type == "float":
-            val = self.builder.fpext(val, ir.DoubleType())
-        elif val_type == "bool":
-            str_true = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
-            str_false = self.visit_LiteralNode(LiteralNode("str", "false"))[0]
-            val = self.builder.select(val, str_true, str_false)
+        if val_ty == "float":
+            value = self.builder.fpext(value, ir.DoubleType())
+        elif val_ty == "bool":
+            true_string = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
+            false_string = self.visit_LiteralNode(LiteralNode("str", "false"))[0]
+            value = self.builder.select(value, true_string, false_string)
 
-        self.builder.call(self.printf, [fmt_ptr, val])
+        self.builder.call(self.printf_function, [format_pointer, value])
 
     def visit_ExitNode(self, node):
-        val, val_type = self.visit(node.code_node)
-        if val_type != "int":
-            raise TypeError(f"exit() expected int exit code, got {val_type}")
-        self.builder.call(self.exit_fn, [val])
+        exit_code, exit_code_type = self.visit(node.exit_code)
+        if exit_code_type != "int":
+            raise TypeError(f"exit() expected int exit code, got {exit_code_type}")
+        self.builder.call(self.exit_function, [exit_code])
 
     def visit_FreeNode(self, node):
-        val, val_type = self.visit(node.ptr_node)
-        if val_type != "str":
-            raise TypeError(f"free() expected string pointer, got {val_type}")
-        self.builder.call(self.free_fn, [val])
+        ptr, pointer_type = self.visit(node.pointer_expression)
+        if pointer_type != "str":
+            raise TypeError(f"free() expected string pointer, got {pointer_type}")
+        self.builder.call(self.free_function, [ptr])
+        
+    def llvm_type_for(self, type_name):
+        if type_name == "int": return self.int32_type
+        elif type_name == "float": return self.float_type
+        elif type_name == "bool": return self.bool_type
+        elif type_name == "str": return self.char_pointer_type
+        return self.int32_type
+
+    def visit_FunctionDeclarationNode(self, node):
+        previous_builder = self.builder
+        previous_variable_pointers = self.variable_pointers.copy()
+        previous_type_information = self.type_information.copy()
+
+        parameter_types = [self.llvm_type_for(parameter_type) for _, parameter_type in node.parameters]
+        return_llvm_type = self.llvm_type_for(node.return_type)
+
+        function_type = ir.FunctionType(return_llvm_type, parameter_types)
+        fn = ir.Function(self.module, function_type, name=node.function_name)
+        fn.attributes.add("noinline")
+        
+        self.type_information[f"function_{node.function_name}"] = node.return_type
+
+        entry_block = fn.append_basic_block(name="entry")
+        self.builder = ir.IRBuilder(entry_block)
+
+        for idx, (parameter_name, parameter_type) in enumerate(node.parameters):
+            parameter_llvm_type = self.llvm_type_for(parameter_type)
+            parameter_pointer = self.builder.alloca(parameter_llvm_type, name=parameter_name)
+            self.builder.store(fn.args[idx], parameter_pointer)
+            self.variable_pointers[parameter_name] = parameter_pointer
+            self.type_information[parameter_name] = parameter_type
+
+        for stmt in node.body:
+            self.visit(stmt)
+
+        self.builder = previous_builder
+        self.variable_pointers = previous_variable_pointers
+        self.type_information = previous_type_information
+        self.type_information[f"function_{node.function_name}"] = node.return_type
+
+    def visit_ReturnNode(self, node):
+        value, val_ty = self.visit(node.expression)
+        if node.return_type is not None and val_ty != node.return_type:
+            raise TypeError(f"Return annotation expects {node.return_type}, got {val_ty}")
+        if value.type != self.builder.function.function_type.return_type:
+            raise TypeError(f"Return value of type {val_ty} does not match the function return type")
+        self.builder.ret(value)
+
+    def visit_FunctionCallNode(self, node):
+        fn = self.module.get_global(node.function_name)
+        argument_values = []
+        for arg in node.arguments:
+            value, _ = self.visit(arg)
+            argument_values.append(value)
+
+        ret_ty = self.type_information.get(f"function_{node.function_name}", "int")
+        res = self.builder.call(fn, argument_values, name=f"{node.function_name}_result")
+        return res, ret_ty

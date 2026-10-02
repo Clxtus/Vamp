@@ -20,8 +20,10 @@ All variable and constant types.
     bool()
 Use to swap variable/constant type.
 
-    func function(argument1 : int, argument2 : int) : ()
-Creates a function, arguments are placed in the first set of parenthesis, the function body is placed in the second.
+    func function(argument1 : float, argument2 : float) : (
+        return : float (argument1 + argument2)
+    )
+Creates a function, with arguments in the first set of parenthesis and the body in the second. A return statement can declare its type with `return : type (expression)`; the parentheses delimit the complete return expression. Return annotations in a function must match. Without an annotation, the return type defaults to int.
 
     print("expression")
 Prints a string or a variable/constant's value without creating a newline, use () to print in single line and {} to print in multi line.

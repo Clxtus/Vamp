@@ -1,4 +1,4 @@
-("C:\\Users\\sara's "
+("c:\\Users\\sara's "
  'pc\\Desktop\\Suleman\\Studio\\Vamp\\Compiler\\build\\vamp\\PYZ-00.pyz',
  [('IPython',
    "C:\\Users\\sara's "
@@ -1405,7 +1405,7 @@
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.13_3.13.3824.0_x64__qbz5n2kfra8p0\\Lib\\code.py',
    'PYMODULE'),
   ('codegen',
-   "C:\\Users\\sara's pc\\Desktop\\Suleman\\Studio\\Vamp\\Compiler\\codegen.py",
+   "c:\\Users\\sara's pc\\Desktop\\Suleman\\Studio\\Vamp\\Compiler\\codegen.py",
    'PYMODULE'),
   ('codeop',
    'C:\\Program '
@@ -2872,7 +2872,7 @@
    'pc\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python313\\site-packages\\lark\\visitors.py',
    'PYMODULE'),
   ('lexer',
-   "C:\\Users\\sara's pc\\Desktop\\Suleman\\Studio\\Vamp\\Compiler\\lexer.py",
+   "c:\\Users\\sara's pc\\Desktop\\Suleman\\Studio\\Vamp\\Compiler\\lexer.py",
    'PYMODULE'),
   ('llvmlite',
    "C:\\Users\\sara's "
@@ -3903,7 +3903,7 @@
    'pc\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python313\\site-packages\\packaging\\version.py',
    'PYMODULE'),
   ('parser',
-   "C:\\Users\\sara's pc\\Desktop\\Suleman\\Studio\\Vamp\\Compiler\\parser.py",
+   "c:\\Users\\sara's pc\\Desktop\\Suleman\\Studio\\Vamp\\Compiler\\parser.py",
    'PYMODULE'),
   ('parso',
    "C:\\Users\\sara's "
