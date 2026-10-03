@@ -6,8 +6,10 @@
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#function-declarations" },
+    { "include": "#for-loop" },
     { "include": "#variable-declarations" },
     { "include": "#library-function-calls" },
+    { "include": "#dictionary-properties" },
     { "include": "#built-in-functions" },
     { "include": "#keywords" },
     { "include": "#casts" },
@@ -55,6 +57,22 @@
         }
       ]
     },
+    "for-loop": {
+      "patterns": [
+        {
+          "name": "meta.for-loop.vamp",
+          "match": "\\b(for)(\\s*\\()([a-zA-Z_][a-zA-Z0-9_]*)(\\s*\\))(\\s+)(in)(\\s*\\()",
+          "captures": {
+            "1": { "name": "keyword.control.vamp" },
+            "2": { "name": "punctuation.section.group.vamp" },
+            "3": { "name": "variable.other.vamp" },
+            "4": { "name": "punctuation.section.group.vamp" },
+            "6": { "name": "keyword.control.vamp" },
+            "7": { "name": "punctuation.section.group.vamp" }
+          }
+        }
+      ]
+    },
     "function-parameters": {
       "patterns": [
         {
@@ -76,6 +94,18 @@
         }
       ]
     },
+    "dictionary-properties": {
+      "patterns": [
+        {
+          "name": "meta.dictionary-property.vamp",
+          "match": "(\\.)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "punctuation.accessor.vamp" },
+            "2": { "name": "variable.other.property.vamp" }
+          }
+        }
+      ]
+    },
     "built-in-functions": {
       "patterns": [
         {
@@ -88,7 +118,7 @@
       "patterns": [
         {
           "name": "keyword.control.vamp",
-          "match": "\\b(import|val|const|func|return)\\b"
+          "match": "\\b(import|val|const|func|return|if|else|for|in)\\b"
         },
         {
           "name": "constant.language.boolean.vamp",
@@ -135,7 +165,7 @@
       "patterns": [
         {
           "name": "keyword.operator.vamp",
-          "match": "[+*/=-]"
+          "match": "[+*/=<>!-]"
         }
       ]
     },

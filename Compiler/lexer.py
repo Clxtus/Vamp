@@ -2,10 +2,11 @@ import re
 
 TOKEN_PATTERNS = [
     ("IMPORT", r"\bimport\b"),
-    ("KEYWORD", r"\b(val|const)\b"),
+    ("KEYWORD", r"\b(val|const|for|in)\b"),
     ("CAST", r"\b(int|str|float|bool)(?=\s*\()"),
     ("TYPE", r"\b(int|float|bool|str)\b"),
     ("BOOL", r"\b(true|false)\b"),
+    ("COMPARISON_OPERATOR", r"==|!=|<=|>=|<|>"),
     ("IDENTIFIER", r"\b[a-zA-Z_][a-zA-Z0-9_]*\b"),
     ("FLOAT_LITERAL", r"\b\d+\.\d+\b"),
     ("INT_LITERAL", r"\b\d+\b"),
@@ -15,6 +16,8 @@ TOKEN_PATTERNS = [
     ("RPAREN", r"\)"),
     ("LBRACE", r"\{"),
     ("RBRACE", r"\}"),
+    ("LBRACKET", r"\["),
+    ("RBRACKET", r"\]"),
     ("COLON", r":"),
     ("COMMA", r","),
     ("SEMICOLON", r";"),

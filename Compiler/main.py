@@ -57,7 +57,7 @@ def compile_file(source_filepath):
     clang_bin = get_clang_path()
     print(f"[2/3] Building native binary '{exe_filename}' via Clang ({clang_bin})...")
 
-    clang_cmd = [clang_bin, ir_filename, "-o", exe_filename, "-lshell32"]
+    clang_cmd = [clang_bin, ir_filename, "-O2", "-o", exe_filename, "-lshell32"]
     try:
         res = subprocess.run(clang_cmd, capture_output=True, text=True)
         if res.returncode != 0:

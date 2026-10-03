@@ -1,5 +1,20 @@
 from llvmlite import ir
-from parser import LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode
+from parser import ArrayAccessNode, ArrayLiteralNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, VariableAccessNode
+
+class ArrayLiteralValue:
+    def __init__(self, elements, element_type):
+        self.elements = elements
+        self.element_type = element_type
+
+class ArrayReferenceValue:
+    def __init__(self, pointer, element_type, length):
+        self.pointer = pointer
+        self.element_type = element_type
+        self.length = length
+
+class DictionaryLiteralValue:
+    def __init__(self, entries):
+        self.entries = entries
 
 class LLVMCodeGenerator:
     def __init__(self):
@@ -7,6 +22,8 @@ class LLVMCodeGenerator:
         self.builder = None
         self.variable_pointers = {}
         self.type_information = {}
+        self.array_information = {}
+        self.dictionary_information = {}
         self.imported_libraries = set()
         self.string_literal_count = 0
 
@@ -115,11 +132,216 @@ class LLVMCodeGenerator:
             string_global.initializer = string_constant
             return self.builder.bitcast(string_global, self.char_pointer_type), "str"
 
+    def visit_ArrayLiteralNode(self, node):
+        if not node.elements:
+            raise TypeError("Arrays must contain at least one element so their type can be inferred")
+
+        elems = []
+        elem_ty = None
+        for expr in node.elements:
+            value, val_ty = self.visit(expr)
+            if elem_ty is None:
+                elem_ty = val_ty
+            elif val_ty != elem_ty:
+                raise TypeError("Array elements must all have the same type")
+            elems.append(value)
+
+        return ArrayLiteralValue(elems, elem_ty), "array"
+
+    def visit_DictionaryLiteralNode(self, node):
+        if not node.entries:
+            raise TypeError("Dictionaries must contain at least one typed field")
+
+        entries = []
+        seen_keys = set()
+        for key, decl_ty, expr in node.entries:
+            if key in seen_keys:
+                raise SyntaxError(f"Duplicate dictionary field '{key}'")
+            seen_keys.add(key)
+            value, val_ty = self.visit(expr)
+            if val_ty != decl_ty:
+                raise TypeError(f"Dictionary field '{key}' expects {decl_ty}, got {val_ty}")
+            entries.append((key, decl_ty, value))
+
+        return DictionaryLiteralValue(entries), "dictionary"
+
     def visit_VariableAccessNode(self, node):
-        variable_pointer = self.variable_pointers[node.variable_name]
         variable_type = self.type_information[node.variable_name]
+        if variable_type in ("array", "dictionary"):
+            raise TypeError(f"Use an index or field to read '{node.variable_name}'")
+        variable_pointer = self.variable_pointers[node.variable_name]
         value = self.builder.load(variable_pointer, name=f"{node.variable_name}_value")
         return value, variable_type
+
+    def visit_ArrayAccessNode(self, node):
+        if not isinstance(node.array, VariableAccessNode):
+            raise TypeError("Array access requires an array variable")
+        array_name = node.array.variable_name
+        array_info = self.array_information[array_name]
+        idx, index_type = self.visit(node.index)
+        if index_type != "int":
+            raise TypeError("Array indexes must be int")
+        element_pointer = self.builder.gep(
+            self.variable_pointers[array_name],
+            [ir.Constant(self.int32_type, 0), idx],
+            name=f"{array_name}_element_pointer",
+        )
+        return self.builder.load(element_pointer, name=f"{array_name}_element"), array_info["element_type"]
+
+    def visit_DictionaryAccessNode(self, node):
+        if not isinstance(node.dictionary, VariableAccessNode):
+            raise TypeError("Dictionary field access requires a dictionary variable")
+        dictionary_name = node.dictionary.variable_name
+        field_index, field_ty = self.dictionary_information[dictionary_name][node.key]
+        field_pointer = self.builder.gep(
+            self.variable_pointers[dictionary_name],
+            [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
+            name=f"{dictionary_name}_{node.key}_pointer",
+        )
+        return self.builder.load(field_pointer, name=f"{dictionary_name}_{node.key}"), field_ty
+
+    def visit_ForLoopNode(self, node):
+        if isinstance(node.iterable, DictionaryAccessNode) and node.iterable.key == "values":
+            if not isinstance(node.iterable.dictionary, VariableAccessNode):
+                raise TypeError("Dictionary value loops require a dictionary variable")
+            dictionary_name = node.iterable.dictionary.variable_name
+            fields = self.dictionary_information.get(dictionary_name)
+            if fields is None:
+                raise TypeError(f"'{dictionary_name}' is not a dictionary")
+            self.emit_dictionary_value_loop(dictionary_name, node.item_name, node.body)
+            return
+
+        if isinstance(node.iterable, VariableAccessNode):
+            collection_name = node.iterable.variable_name
+            collection_type = self.type_information.get(collection_name)
+            if collection_type == "array":
+                array_info = self.array_information[collection_name]
+                self.emit_array_loop(
+                    self.variable_pointers[collection_name],
+                    array_info["element_type"],
+                    array_info["length"],
+                    node.item_name,
+                    node.body,
+                )
+                return
+            if collection_type == "dictionary":
+                field_names = list(self.dictionary_information[collection_name])
+                self.emit_dictionary_key_loop(field_names, node.item_name, node.body)
+                return
+
+        iterable_value, iterable_type = self.visit(node.iterable)
+        if isinstance(iterable_value, ArrayLiteralValue):
+            array_pointer = self.materialize_array(iterable_value, f"{node.item_name}_array")
+            self.emit_array_loop(
+                array_pointer,
+                iterable_value.element_type,
+                len(iterable_value.elements),
+                node.item_name,
+                node.body,
+            )
+            return
+        if isinstance(iterable_value, DictionaryLiteralValue):
+            field_names = [field_name for field_name, _, _ in iterable_value.entries]
+            self.emit_dictionary_key_loop(field_names, node.item_name, node.body)
+            return
+        raise TypeError(f"For loops cannot iterate over values of type '{iterable_type}'")
+
+    def emit_dictionary_value_loop(self, dictionary_name, item_name, body):
+        dictionary_pointer = self.variable_pointers[dictionary_name]
+        saved_variable_pointers = self.variable_pointers.copy()
+        saved_type_information = self.type_information.copy()
+        saved_array_information = self.array_information.copy()
+        saved_dictionary_information = self.dictionary_information.copy()
+
+        for field_name, (field_index, field_ty) in self.dictionary_information[dictionary_name].items():
+            field_pointer = self.builder.gep(
+                dictionary_pointer,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
+                name=f"{dictionary_name}_{field_name}_value_pointer",
+            )
+            self.variable_pointers[item_name] = field_pointer
+            self.type_information[item_name] = field_ty
+            self.array_information.pop(item_name, None)
+            self.dictionary_information.pop(item_name, None)
+
+            for stmt in body:
+                self.visit(stmt)
+            if self.builder.block.is_terminated:
+                break
+
+            self.variable_pointers = saved_variable_pointers.copy()
+            self.type_information = saved_type_information.copy()
+            self.array_information = saved_array_information.copy()
+            self.dictionary_information = saved_dictionary_information.copy()
+
+        self.variable_pointers = saved_variable_pointers
+        self.type_information = saved_type_information
+        self.array_information = saved_array_information
+        self.dictionary_information = saved_dictionary_information
+
+    def materialize_array(self, array_value, array_name):
+        array_type = ir.ArrayType(self.llvm_type_for(array_value.element_type), len(array_value.elements))
+        array_pointer = self.builder.alloca(array_type, name=array_name)
+        for idx, elem in enumerate(array_value.elements):
+            element_pointer = self.builder.gep(
+                array_pointer,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, idx)],
+            )
+            self.builder.store(elem, element_pointer)
+        return array_pointer
+
+    def emit_dictionary_key_loop(self, field_names, item_name, body):
+        key_values = [self.visit_LiteralNode(LiteralNode("str", field_name))[0] for field_name in field_names]
+        key_array = ArrayLiteralValue(key_values, "str")
+        key_pointer = self.materialize_array(key_array, f"{item_name}_keys")
+        self.emit_array_loop(key_pointer, "str", len(field_names), item_name, body)
+
+    def emit_array_loop(self, array_pointer, element_type, array_length, item_name, body):
+
+        fn = self.builder.function
+        preheader_block = self.builder.block
+        condition_block = fn.append_basic_block(name="for_condition")
+        body_block = fn.append_basic_block(name="for_body")
+        end_block = fn.append_basic_block(name="for_end")
+        self.builder.branch(condition_block)
+
+        self.builder.position_at_end(condition_block)
+        item_index = self.builder.phi(self.int32_type, name="for_index")
+        item_index.add_incoming(ir.Constant(self.int32_type, 0), preheader_block)
+        has_next_item = self.builder.icmp_signed(
+            "<", item_index, ir.Constant(self.int32_type, array_length), name="for_has_item"
+        )
+        self.builder.cbranch(has_next_item, body_block, end_block)
+
+        self.builder.position_at_end(body_block)
+        item_pointer = self.builder.gep(
+            array_pointer,
+            [ir.Constant(self.int32_type, 0), item_index],
+            name=f"{item_name}_pointer",
+        )
+        saved_variable_pointers = self.variable_pointers.copy()
+        saved_type_information = self.type_information.copy()
+        saved_array_information = self.array_information.copy()
+        saved_dictionary_information = self.dictionary_information.copy()
+        self.variable_pointers[item_name] = item_pointer
+        self.type_information[item_name] = element_type
+        self.array_information.pop(item_name, None)
+        self.dictionary_information.pop(item_name, None)
+
+        for stmt in body:
+            self.visit(stmt)
+
+        if not self.builder.block.is_terminated:
+            loop_end_block = self.builder.block
+            next_item_index = self.builder.add(item_index, ir.Constant(self.int32_type, 1), name="for_next_index")
+            self.builder.branch(condition_block)
+            item_index.add_incoming(next_item_index, loop_end_block)
+
+        self.variable_pointers = saved_variable_pointers
+        self.type_information = saved_type_information
+        self.array_information = saved_array_information
+        self.dictionary_information = saved_dictionary_information
+        self.builder.position_at_end(end_block)
 
     def visit_BinaryOpNode(self, node):
         lhs, lhs_ty = self.visit(node.left)
@@ -155,6 +377,70 @@ class LLVMCodeGenerator:
             elif node.operator == "/": return self.builder.fdiv(lhs, rhs, name="fdivtmp"), "float"
 
         raise SyntaxError(f"Unsupported binary operator '{node.operator}' for type '{lhs_ty}'")
+
+    def visit_ComparisonNode(self, node):
+        lhs, lhs_ty = self.visit(node.left)
+        rhs, rhs_ty = self.visit(node.right)
+
+        if lhs_ty != rhs_ty:
+            raise TypeError(f"Cannot compare {lhs_ty} with {rhs_ty}")
+
+        if lhs_ty == "float":
+            if node.operator == "!=":
+                return self.builder.fcmp_unordered(node.operator, lhs, rhs), "bool"
+            return self.builder.fcmp_ordered(node.operator, lhs, rhs), "bool"
+
+        if lhs_ty == "str":
+            comparison = self.builder.call(self.strcmp_function, [lhs, rhs])
+            return self.builder.icmp_signed(node.operator, comparison, ir.Constant(self.int32_type, 0)), "bool"
+
+        if lhs_ty == "bool" and node.operator not in ("==", "!="):
+            raise SyntaxError("Boolean values only support == and != comparisons")
+        if lhs_ty in ("int", "bool"):
+            return self.builder.icmp_signed(node.operator, lhs, rhs), "bool"
+
+        raise SyntaxError(f"Values of type '{lhs_ty}' cannot be compared")
+
+    def visit_IfNode(self, node):
+        fn = self.builder.function
+        merge_block = fn.append_basic_block(name="if_end")
+        visible_variable_pointers = self.variable_pointers.copy()
+        visible_type_information = self.type_information.copy()
+        visible_array_information = self.array_information.copy()
+        visible_dictionary_information = self.dictionary_information.copy()
+
+        for cond, body in node.branches:
+            condition_value, condition_type = self.visit(cond)
+            if condition_type != "bool":
+                raise TypeError(f"if condition must be bool, got {condition_type}")
+
+            body_block = fn.append_basic_block(name="if_body")
+            next_branch_block = fn.append_basic_block(name="if_next")
+            self.builder.cbranch(condition_value, body_block, next_branch_block)
+
+            self.builder.position_at_end(body_block)
+            for stmt in body:
+                self.visit(stmt)
+            if not self.builder.block.is_terminated:
+                self.builder.branch(merge_block)
+
+            self.variable_pointers = visible_variable_pointers.copy()
+            self.type_information = visible_type_information.copy()
+            self.array_information = visible_array_information.copy()
+            self.dictionary_information = visible_dictionary_information.copy()
+            self.builder.position_at_end(next_branch_block)
+
+        if node.else_body is not None:
+            for stmt in node.else_body:
+                self.visit(stmt)
+        if not self.builder.block.is_terminated:
+            self.builder.branch(merge_block)
+
+        self.variable_pointers = visible_variable_pointers
+        self.type_information = visible_type_information
+        self.array_information = visible_array_information
+        self.dictionary_information = visible_dictionary_information
+        self.builder.position_at_end(merge_block)
 
     def visit_CastNode(self, node):
         value, val_ty = self.visit(node.expression)
@@ -216,18 +502,54 @@ class LLVMCodeGenerator:
 
     def visit_VariableDeclarationNode(self, node):
         value, val_ty = self.visit(node.initializer)
-        if val_ty != node.variable_type:
+        if node.variable_type is not None and val_ty != node.variable_type:
             raise TypeError(f"Cannot assign {val_ty} to variable '{node.variable_name}' of type {node.variable_type}")
 
-        if node.variable_type == "int": ll_ty = self.int32_type
-        elif node.variable_type == "float": ll_ty = self.float_type
-        elif node.variable_type == "bool": ll_ty = self.bool_type
-        elif node.variable_type == "str": ll_ty = self.char_pointer_type
+        if isinstance(value, ArrayLiteralValue):
+            array_type = ir.ArrayType(self.llvm_type_for(value.element_type), len(value.elements))
+            variable_pointer = self.builder.alloca(array_type, name=node.variable_name)
+            for idx, elem in enumerate(value.elements):
+                element_pointer = self.builder.gep(
+                    variable_pointer,
+                    [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, idx)],
+                )
+                self.builder.store(elem, element_pointer)
+            self.variable_pointers[node.variable_name] = variable_pointer
+            self.type_information[node.variable_name] = "array"
+            self.array_information[node.variable_name] = {
+                "element_type": value.element_type,
+                "length": len(value.elements),
+            }
+            self.dictionary_information.pop(node.variable_name, None)
+            return
 
-        variable_pointer = self.builder.alloca(ll_ty, name=node.variable_name)
+        if isinstance(value, DictionaryLiteralValue):
+            dictionary_type = ir.LiteralStructType([
+                self.llvm_type_for(field_ty)
+                for _, field_ty, _ in value.entries
+            ])
+            variable_pointer = self.builder.alloca(dictionary_type, name=node.variable_name)
+            fields = {}
+            for field_index, (field_name, field_ty, field_value) in enumerate(value.entries):
+                field_pointer = self.builder.gep(
+                    variable_pointer,
+                    [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
+                )
+                self.builder.store(field_value, field_pointer)
+                fields[field_name] = (field_index, field_ty)
+            self.variable_pointers[node.variable_name] = variable_pointer
+            self.type_information[node.variable_name] = "dictionary"
+            self.dictionary_information[node.variable_name] = fields
+            self.array_information.pop(node.variable_name, None)
+            return
+
+        variable_type = node.variable_type or val_ty
+        variable_pointer = self.builder.alloca(self.llvm_type_for(variable_type), name=node.variable_name)
         self.builder.store(value, variable_pointer)
         self.variable_pointers[node.variable_name] = variable_pointer
-        self.type_information[node.variable_name] = node.variable_type
+        self.type_information[node.variable_name] = variable_type
+        self.array_information.pop(node.variable_name, None)
+        self.dictionary_information.pop(node.variable_name, None)
 
     def visit_PrintNode(self, node):
         value, val_ty = self.visit(node.expression)
@@ -273,6 +595,8 @@ class LLVMCodeGenerator:
         previous_builder = self.builder
         previous_variable_pointers = self.variable_pointers.copy()
         previous_type_information = self.type_information.copy()
+        previous_array_information = self.array_information.copy()
+        previous_dictionary_information = self.dictionary_information.copy()
 
         parameter_types = [self.llvm_type_for(parameter_type) for _, parameter_type in node.parameters]
         return_llvm_type = self.llvm_type_for(node.return_type)
@@ -299,6 +623,8 @@ class LLVMCodeGenerator:
         self.builder = previous_builder
         self.variable_pointers = previous_variable_pointers
         self.type_information = previous_type_information
+        self.array_information = previous_array_information
+        self.dictionary_information = previous_dictionary_information
         self.type_information[f"function_{node.function_name}"] = node.return_type
 
     def visit_ReturnNode(self, node):

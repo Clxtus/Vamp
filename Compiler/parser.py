@@ -13,6 +13,35 @@ class ReturnNode(ASTNode):
         self.expression = expression
         self.return_type = return_type
 
+class IfNode(ASTNode):
+    def __init__(self, branches, else_body):
+        self.branches = branches
+        self.else_body = else_body
+
+class ForLoopNode(ASTNode):
+    def __init__(self, item_name, iterable, body):
+        self.item_name = item_name
+        self.iterable = iterable
+        self.body = body
+
+class ArrayLiteralNode(ASTNode):
+    def __init__(self, elements):
+        self.elements = elements
+
+class DictionaryLiteralNode(ASTNode):
+    def __init__(self, entries):
+        self.entries = entries
+
+class ArrayAccessNode(ASTNode):
+    def __init__(self, array, index):
+        self.array = array
+        self.index = index
+
+class DictionaryAccessNode(ASTNode):
+    def __init__(self, dictionary, key):
+        self.dictionary = dictionary
+        self.key = key
+
 class FunctionCallNode(ASTNode):
     def __init__(self, function_name, arguments):
         self.function_name = function_name
@@ -68,6 +97,12 @@ class BinaryOpNode(ASTNode):
         self.operator = operator
         self.right = right
 
+class ComparisonNode(ASTNode):
+    def __init__(self, left, operator, right):
+        self.left = left
+        self.operator = operator
+        self.right = right
+
 class CastNode(ASTNode):
     def __init__(self, target_type, expression):
         self.target_type = target_type
@@ -114,8 +149,17 @@ class Parser:
         elif current_token.kind == "KEYWORD" and current_token.text in ("val", "const"):
             return self.parse_variable_declaration()
 
+        elif current_token.kind == "KEYWORD" and current_token.text == "var":
+            return self.parse_variable_declaration()
+
+        elif current_token.kind == "KEYWORD" and current_token.text == "for":
+            return self.parse_for_loop()
+
         elif current_token.kind == "IDENTIFIER" and current_token.text == "func":
             return self.parse_function_declaration()
+
+        elif current_token.kind == "IDENTIFIER" and current_token.text == "if":
+            return self.parse_if_statement()
 
         elif current_token.kind == "IDENTIFIER" and current_token.text == "return":
             self.consume("IDENTIFIER")
@@ -170,6 +214,53 @@ class Parser:
 
         raise SyntaxError(f"Unsupported statement: {current_token}")
 
+    def parse_if_statement(self):
+        self.consume("IDENTIFIER", "if")
+        cond = self.parse_parenthesized_condition()
+        self.consume("COLON")
+        branches = [(cond, self.parse_block())]
+        else_body = None
+
+        while self.peek() and self.peek().kind == "IDENTIFIER" and self.peek().text == "else":
+            self.consume("IDENTIFIER", "else")
+            if self.peek() and self.peek().kind == "IDENTIFIER" and self.peek().text == "if":
+                self.consume("IDENTIFIER", "if")
+                cond = self.parse_parenthesized_condition()
+                self.consume("COLON")
+                branches.append((cond, self.parse_block()))
+            else:
+                self.consume("COLON")
+                else_body = self.parse_block()
+                break
+
+        return IfNode(branches, else_body)
+
+    def parse_parenthesized_condition(self):
+        self.consume("LPAREN")
+        cond = self.parse_expression()
+        self.consume("RPAREN")
+        return cond
+
+    def parse_block(self):
+        self.consume("LPAREN")
+        stmts = []
+        while self.peek() and self.peek().kind != "RPAREN":
+            stmts.append(self.parse_statement())
+        self.consume("RPAREN")
+        return stmts
+
+    def parse_for_loop(self):
+        self.consume("KEYWORD", "for")
+        self.consume("LPAREN")
+        item_name = self.consume("IDENTIFIER").text
+        self.consume("RPAREN")
+        self.consume("KEYWORD", "in")
+        self.consume("LPAREN")
+        iterable = self.parse_expression()
+        self.consume("RPAREN")
+        self.consume("COLON")
+        return ForLoopNode(item_name, iterable, self.parse_block())
+
     def parse_function_declaration(self):
         self.consume("IDENTIFIER", "func")
         function_name = self.consume("IDENTIFIER").text
@@ -222,14 +313,25 @@ class Parser:
         declaration_keyword = self.consume("KEYWORD").text
         is_constant = declaration_keyword == "const"
         var_name = self.consume("IDENTIFIER").text
-        self.consume("COLON")
-        variable_type = self.consume("TYPE").text
-        self.consume("OPERATOR", "=")
+        variable_type = None
+        if self.peek() and self.peek().kind == "COLON":
+            self.consume("COLON")
+            variable_type = self.consume("TYPE").text
+            self.consume("OPERATOR", "=")
+        elif declaration_keyword == "val":
+            self.consume("OPERATOR", "=")
+        else:
+            raise SyntaxError("const declarations require an explicit type")
         initializer = self.parse_expression()
         return VariableDeclarationNode(is_constant, var_name, variable_type, initializer)
 
     def parse_expression(self):
-        return self.parse_additive_expression()
+        left = self.parse_additive_expression()
+        if self.peek() and self.peek().kind == "COMPARISON_OPERATOR":
+            operator = self.consume("COMPARISON_OPERATOR").text
+            right = self.parse_additive_expression()
+            return ComparisonNode(left, operator, right)
+        return left
 
     def parse_additive_expression(self):
         left = self.parse_multiplicative_expression()
@@ -249,7 +351,27 @@ class Parser:
 
     def parse_primary_expression(self):
         current_token = self.peek()
-        if current_token.kind == "CAST":
+        if current_token.kind == "LBRACKET":
+            self.consume("LBRACKET")
+            elems = []
+            if self.peek() and self.peek().kind != "RBRACKET":
+                elems.append(self.parse_expression())
+                while self.peek() and self.peek().kind == "COMMA":
+                    self.consume("COMMA")
+                    elems.append(self.parse_expression())
+            self.consume("RBRACKET")
+            return ArrayLiteralNode(elems)
+        elif current_token.kind == "LBRACE":
+            self.consume("LBRACE")
+            entries = []
+            if self.peek() and self.peek().kind != "RBRACE":
+                entries.append(self.parse_dictionary_entry())
+                while self.peek() and self.peek().kind == "COMMA":
+                    self.consume("COMMA")
+                    entries.append(self.parse_dictionary_entry())
+            self.consume("RBRACE")
+            return DictionaryLiteralNode(entries)
+        elif current_token.kind == "CAST":
             tgt_ty = self.consume("CAST").text
             self.consume("LPAREN")
             expr = self.parse_expression()
@@ -285,16 +407,38 @@ class Parser:
                 library_name = self.consume("IDENTIFIER").text
                 self.consume("DOT")
                 meth_name = self.consume("IDENTIFIER").text
-                self.consume("LPAREN")
-                args = []
-                if self.peek() and self.peek().kind != "RPAREN":
-                    args.append(self.parse_expression())
-                    while self.peek() and self.peek().kind == "COMMA":
-                        self.consume("COMMA")
+                if self.peek() and self.peek().kind == "LPAREN":
+                    self.consume("LPAREN")
+                    args = []
+                    if self.peek() and self.peek().kind != "RPAREN":
                         args.append(self.parse_expression())
-                self.consume("RPAREN")
-                return LibraryCallNode(library_name, meth_name, args)
+                        while self.peek() and self.peek().kind == "COMMA":
+                            self.consume("COMMA")
+                            args.append(self.parse_expression())
+                    self.consume("RPAREN")
+                    return LibraryCallNode(library_name, meth_name, args)
+                return DictionaryAccessNode(VariableAccessNode(library_name), meth_name)
 
-            return VariableAccessNode(self.consume().text)
+            array = VariableAccessNode(self.consume("IDENTIFIER").text)
+            if self.peek() and self.peek().kind == "LBRACKET":
+                self.consume("LBRACKET")
+                idx = self.parse_expression()
+                self.consume("RBRACKET")
+                return ArrayAccessNode(array, idx)
+            return array
         else:
             raise SyntaxError(f"Unexpected token in expression: {current_token}")
+
+    def parse_dictionary_entry(self):
+        key_token = self.consume()
+        if key_token.kind == "IDENTIFIER":
+            key = key_token.text
+        elif key_token.kind == "STRING_LITERAL":
+            key = key_token.text[1:-1]
+        else:
+            raise SyntaxError("Dictionary keys must be names or strings")
+        self.consume("COLON")
+        val_ty = self.consume("TYPE").text
+        self.consume("OPERATOR", "=")
+        value = self.parse_expression()
+        return key, val_ty, value
