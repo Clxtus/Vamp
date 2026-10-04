@@ -42,6 +42,24 @@ class DictionaryAccessNode(ASTNode):
         self.dictionary = dictionary
         self.key = key
 
+class ClassDeclarationNode(ASTNode):
+    def __init__(self, class_name, fields, nested_classes=None, methods=None):
+        self.class_name = class_name
+        self.fields = fields
+        self.nested_classes = nested_classes or []
+        self.methods = methods or []
+
+class ClassInstanceDeclarationNode(ASTNode):
+    def __init__(self, instance_name, initializer):
+        self.instance_name = instance_name
+        self.initializer = initializer
+
+class MethodCallNode(ASTNode):
+    def __init__(self, receiver, method_name, arguments):
+        self.receiver = receiver
+        self.method_name = method_name
+        self.arguments = arguments
+
 class FunctionCallNode(ASTNode):
     def __init__(self, function_name, arguments):
         self.function_name = function_name
@@ -149,6 +167,9 @@ class Parser:
         elif current_token.kind == "KEYWORD" and current_token.text in ("val", "const"):
             return self.parse_variable_declaration()
 
+        elif current_token.kind == "KEYWORD" and current_token.text == "class":
+            return self.parse_class_declaration()
+
         elif current_token.kind == "KEYWORD" and current_token.text == "var":
             return self.parse_variable_declaration()
 
@@ -167,30 +188,41 @@ class Parser:
             if self.peek() and self.peek().kind == "COLON":
                 self.consume("COLON")
                 annotation_token = self.peek()
-                if not annotation_token or annotation_token.kind not in ("TYPE", "CAST"):
+                if (
+                    not annotation_token
+                    or annotation_token.kind not in ("TYPE", "CAST", "IDENTIFIER")
+                    or (annotation_token.kind == "IDENTIFIER" and annotation_token.text != "void")
+                ):
                     raise SyntaxError("Expected a return type after ':'")
                 ret_ty = self.consume().text
-                self.consume("LPAREN")
-                expr = self.parse_expression()
-                self.consume("RPAREN")
+                if ret_ty == "void":
+                    expr = None
+                else:
+                    self.consume("LPAREN")
+                    expr = self.parse_expression()
+                    self.consume("RPAREN")
             else:
                 expr = self.parse_expression()
             return ReturnNode(expr, ret_ty)
 
         elif current_token.kind == "IDENTIFIER":
+            if (
+                self.position + 1 < len(self.tokens)
+                and self.tokens[self.position + 1].kind == "OPERATOR"
+                and self.tokens[self.position + 1].text == "="
+            ):
+                return self.parse_class_instance_declaration()
+
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "DOT":
-                library_name = self.consume("IDENTIFIER").text
+                receiver_name = self.consume("IDENTIFIER").text
                 self.consume("DOT")
                 meth_name = self.consume("IDENTIFIER").text
                 self.consume("LPAREN")
-                args = []
-                if self.peek() and self.peek().kind != "RPAREN":
-                    args.append(self.parse_expression())
-                    while self.peek() and self.peek().kind == "COMMA":
-                        self.consume("COMMA")
-                        args.append(self.parse_expression())
+                args = self.parse_call_arguments()
                 self.consume("RPAREN")
-                return LibraryCallNode(library_name, meth_name, args)
+                if receiver_name in ("os", "Directory"):
+                    return LibraryCallNode(receiver_name, meth_name, args)
+                return MethodCallNode(VariableAccessNode(receiver_name), meth_name, args)
 
             if current_token.text in ("println", "print"):
                 is_println = current_token.text == "println"
@@ -213,6 +245,53 @@ class Parser:
                 return FreeNode(pointer_expression)
 
         raise SyntaxError(f"Unsupported statement: {current_token}")
+
+    def parse_class_declaration(self):
+        self.consume("KEYWORD", "class")
+        cls_name = self.consume("IDENTIFIER").text
+        self.consume("COLON")
+        self.consume("LPAREN")
+
+        fields = []
+        nested_classes = []
+        meths = []
+        while self.peek() and self.peek().kind != "RPAREN":
+            if self.peek().kind == "KEYWORD" and self.peek().text == "class":
+                nested_classes.append(self.parse_class_declaration())
+                continue
+            if self.peek().kind == "IDENTIFIER" and self.peek().text == "func":
+                meths.append(self.parse_function_declaration())
+                continue
+
+            declaration_keyword = self.consume("KEYWORD").text
+            if declaration_keyword not in ("val", "const"):
+                raise SyntaxError("Class members must be fields, nested classes, or func methods")
+            field_name = self.consume("IDENTIFIER").text
+            self.consume("COLON")
+            field_ty = self.consume("TYPE").text
+            fields.append((field_name, field_ty, declaration_keyword == "const"))
+
+        self.consume("RPAREN")
+        if not fields and not nested_classes and not meths:
+            raise SyntaxError(f"Class '{cls_name}' must declare a field, nested class, or method")
+        return ClassDeclarationNode(cls_name, fields, nested_classes, meths)
+
+    def parse_class_instance_declaration(self):
+        instance_name = self.consume("IDENTIFIER").text
+        self.consume("OPERATOR", "=")
+        initializer = self.parse_expression()
+        if not isinstance(initializer, (FunctionCallNode, MethodCallNode)):
+            raise SyntaxError("Class instances must be initialized with a class constructor call")
+        return ClassInstanceDeclarationNode(instance_name, initializer)
+
+    def parse_call_arguments(self):
+        args = []
+        if self.peek() and self.peek().kind != "RPAREN":
+            args.append(self.parse_expression())
+            while self.peek() and self.peek().kind == "COMMA":
+                self.consume("COMMA")
+                args.append(self.parse_expression())
+        return args
 
     def parse_if_statement(self):
         self.consume("IDENTIFIER", "if")
@@ -305,7 +384,9 @@ class Parser:
                 raise SyntaxError("Function and return statement types must match")
             function_return_type = annotated_type
         if function_return_type is None:
-            function_return_type = "int"
+            function_return_type = "int" if any(
+                isinstance(stmt, ReturnNode) for stmt in body
+            ) else "void"
 
         return FunctionDeclarationNode(function_name, params, function_return_type, body)
 
@@ -404,20 +485,17 @@ class Parser:
                 return FunctionCallNode(function_name, args)
 
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "DOT":
-                library_name = self.consume("IDENTIFIER").text
+                receiver_name = self.consume("IDENTIFIER").text
                 self.consume("DOT")
-                meth_name = self.consume("IDENTIFIER").text
+                member_name = self.consume("IDENTIFIER").text
                 if self.peek() and self.peek().kind == "LPAREN":
                     self.consume("LPAREN")
-                    args = []
-                    if self.peek() and self.peek().kind != "RPAREN":
-                        args.append(self.parse_expression())
-                        while self.peek() and self.peek().kind == "COMMA":
-                            self.consume("COMMA")
-                            args.append(self.parse_expression())
+                    args = self.parse_call_arguments()
                     self.consume("RPAREN")
-                    return LibraryCallNode(library_name, meth_name, args)
-                return DictionaryAccessNode(VariableAccessNode(library_name), meth_name)
+                    if receiver_name in ("os", "Directory"):
+                        return LibraryCallNode(receiver_name, member_name, args)
+                    return MethodCallNode(VariableAccessNode(receiver_name), member_name, args)
+                return DictionaryAccessNode(VariableAccessNode(receiver_name), member_name)
 
             array = VariableAccessNode(self.consume("IDENTIFIER").text)
             if self.peek() and self.peek().kind == "LBRACKET":

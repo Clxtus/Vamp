@@ -2,7 +2,7 @@ import re
 
 TOKEN_PATTERNS = [
     ("IMPORT", r"\bimport\b"),
-    ("KEYWORD", r"\b(val|const|for|in)\b"),
+    ("KEYWORD", r"\b(val|const|for|in|class)\b"),
     ("CAST", r"\b(int|str|float|bool)(?=\s*\()"),
     ("TYPE", r"\b(int|float|bool|str)\b"),
     ("BOOL", r"\b(true|false)\b"),

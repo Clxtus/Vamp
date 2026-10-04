@@ -67,7 +67,7 @@ def compile_file(source_filepath):
         print(f"\nError: Could not find Clang executable at '{clang_bin}'.")
         sys.exit(1)
 
-    print(f"Successfully built '{exe_filename}' at ultimate speed!")
+    print(f"Successfully built '{exe_filename}'!")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

@@ -1,61 +1,32 @@
 import os
 
-val a : int = int("100")
-val b : float = float(a)
-val c : bool = bool("true")
-val d : str = str(c)
+class Car : (
 
-print("Status: ")
-println(d)
+    val Brand : str
+    val Model : str
+    const max_Speed : float
 
-val msg : str = "Value is: " + str(b)
-println(msg)
+    class Engine : (
 
-os.Make_Directory("C:/Users/sara's pc/Desktop/VampTestFolder")
-println("Created VampTestFolder successfully!")
+        val type : str
+        val hp : float
 
-func add(x: float, y: float) : (
+    )
 
-    return : float ((x+y)/2.0)
+    func Start() : (
     
-)
+        println("CAR STARTED")
 
-const num : int = 7
+        return : void
 
-val array = ["A", "B", "C"]
-val dictionary = {Name : str = "Cletus", Age : int = 25}
-
-if (num == 5) : (
-
-    println("5")
+    )
 
 )
 
-else if (num == 6) : (
+GTR = Car("Nissan", "GT-R R34", 250.0)
+GTR_Engine = GTR.Engine("V8", 420.0)
 
-    println("6")
-
-)
-
-else : (
-
-    println("OTHER")
-
-)
-
-println(array[1])
-println(dictionary.Name)
-
-for (letter) in (array) : (
-
-    println(letter)
-
-)
-
-for (stat) in (dictionary.values) : (
-
-    println(stat)
-
-)
+println(GTR.Brand + " " + GTR.Model)
+GTR.Start()
 
 exit(0)

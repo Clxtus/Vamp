@@ -1,5 +1,5 @@
 from llvmlite import ir
-from parser import ArrayAccessNode, ArrayLiteralNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, VariableAccessNode
+from parser import ArrayAccessNode, ArrayLiteralNode, ClassDeclarationNode, ClassInstanceDeclarationNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, MethodCallNode, VariableAccessNode
 
 class ArrayLiteralValue:
     def __init__(self, elements, element_type):
@@ -16,6 +16,10 @@ class DictionaryLiteralValue:
     def __init__(self, entries):
         self.entries = entries
 
+class ClassInstanceValue:
+    def __init__(self, pointer):
+        self.pointer = pointer
+
 class LLVMCodeGenerator:
     def __init__(self):
         self.module = ir.Module(name="vamp_module")
@@ -24,6 +28,9 @@ class LLVMCodeGenerator:
         self.type_information = {}
         self.array_information = {}
         self.dictionary_information = {}
+        self.class_definitions = {}
+        self.class_methods = {}
+        self.emitted_class_methods = set()
         self.imported_libraries = set()
         self.string_literal_count = 0
 
@@ -69,6 +76,15 @@ class LLVMCodeGenerator:
         self.create_directory_function = ir.Function(self.module, create_directory_type, name="SHCreateDirectoryExA")
 
     def generate_code(self, program):
+        class_declarations = [
+            stmt for stmt in program
+            if isinstance(stmt, ClassDeclarationNode)
+        ]
+        for decl in class_declarations:
+            self.register_class_tree(decl)
+        for decl in class_declarations:
+            self.declare_class_methods(decl)
+
         main_type = ir.FunctionType(self.int32_type, [])
         main_function = ir.Function(self.module, main_type, name="main")
         entry_block = main_function.append_basic_block(name="entry")
@@ -93,6 +109,119 @@ class LLVMCodeGenerator:
 
     def visit_ImportFileNode(self, node):
         pass
+
+    def visit_ClassDeclarationNode(self, node):
+        self.emit_class_methods(node)
+
+    def visit_ClassInstanceDeclarationNode(self, node):
+        instance_value, instance_type = self.visit(node.initializer)
+        if not isinstance(instance_value, ClassInstanceValue):
+            raise TypeError(f"'{node.instance_name}' must be initialized with a class instance")
+        self.variable_pointers[node.instance_name] = instance_value.pointer
+        self.type_information[node.instance_name] = instance_type
+        self.array_information.pop(node.instance_name, None)
+        self.dictionary_information.pop(node.instance_name, None)
+
+    def register_class_tree(self, node, parent_name=None):
+        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
+        if qualified_name in self.class_definitions:
+            raise SyntaxError(f"Class '{qualified_name}' is already declared")
+
+        fields = {}
+        llvm_field_types = []
+        for field_index, (field_name, field_ty, is_constant) in enumerate(node.fields):
+            if field_name in fields:
+                raise SyntaxError(f"Duplicate field '{field_name}' in class '{qualified_name}'")
+            fields[field_name] = (field_index, field_ty, is_constant)
+            llvm_field_types.append(self.llvm_type_for(field_ty))
+
+        nested_classes = {
+            nested.class_name: f"{qualified_name}.{nested.class_name}"
+            for nested in node.nested_classes
+        }
+        self.class_definitions[qualified_name] = {
+            "fields": fields,
+            "field_order": [field_name for field_name, _, _ in node.fields],
+            "llvm_type": ir.LiteralStructType(llvm_field_types),
+            "nested_classes": nested_classes,
+            "methods": node.methods,
+        }
+
+        for nested_class in node.nested_classes:
+            self.register_class_tree(nested_class, qualified_name)
+
+    def declare_class_methods(self, node, parent_name=None):
+        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
+        for meth in node.methods:
+            method_key = (qualified_name, meth.function_name)
+            if method_key in self.class_methods:
+                raise SyntaxError(
+                    f"Method '{meth.function_name}' is already declared on '{qualified_name}'"
+                )
+
+            parameter_types = [self.llvm_type_for(parameter_type) for _, parameter_type in meth.parameters]
+            function_type = ir.FunctionType(
+                self.llvm_type_for(meth.return_type),
+                [self.class_definitions[qualified_name]["llvm_type"].as_pointer(), *parameter_types],
+            )
+            function_name = f"{qualified_name.replace('.', '__')}__{meth.function_name}"
+            fn = ir.Function(self.module, function_type, name=function_name)
+            self.class_methods[method_key] = {
+                "function": fn,
+                "return_type": meth.return_type,
+                "parameters": meth.parameters,
+                "declaration": meth,
+            }
+
+        for nested_class in node.nested_classes:
+            self.declare_class_methods(nested_class, qualified_name)
+
+    def emit_class_methods(self, node, parent_name=None):
+        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
+        for meth in node.methods:
+            method_key = (qualified_name, meth.function_name)
+            if method_key in self.emitted_class_methods:
+                continue
+            self.emitted_class_methods.add(method_key)
+            method_information = self.class_methods[method_key]
+            previous_builder = self.builder
+            previous_variable_pointers = self.variable_pointers.copy()
+            previous_type_information = self.type_information.copy()
+            previous_array_information = self.array_information.copy()
+            previous_dictionary_information = self.dictionary_information.copy()
+
+            fn = method_information["function"]
+            entry_block = fn.append_basic_block(name="entry")
+            self.builder = ir.IRBuilder(entry_block)
+            self.variable_pointers["self"] = fn.args[0]
+            self.type_information["self"] = f"class:{qualified_name}"
+
+            for argument_index, (parameter_name, parameter_type) in enumerate(meth.parameters, start=1):
+                parameter_pointer = self.builder.alloca(self.llvm_type_for(parameter_type), name=parameter_name)
+                self.builder.store(fn.args[argument_index], parameter_pointer)
+                self.variable_pointers[parameter_name] = parameter_pointer
+                self.type_information[parameter_name] = parameter_type
+
+            for stmt in meth.body:
+                self.visit(stmt)
+
+            if not self.builder.block.is_terminated:
+                if isinstance(fn.function_type.return_type, ir.VoidType):
+                    raise SyntaxError(
+                        f"Method '{qualified_name}.{meth.function_name}' must end with 'return : void'"
+                    )
+                raise SyntaxError(
+                    f"Method '{qualified_name}.{meth.function_name}' must return a value"
+                )
+
+            self.builder = previous_builder
+            self.variable_pointers = previous_variable_pointers
+            self.type_information = previous_type_information
+            self.array_information = previous_array_information
+            self.dictionary_information = previous_dictionary_information
+
+        for nested_class in node.nested_classes:
+            self.emit_class_methods(nested_class, qualified_name)
 
     def visit_LibraryCallNode(self, node):
         if node.library_name == "os" and "os" not in self.imported_libraries:
@@ -167,7 +296,7 @@ class LLVMCodeGenerator:
 
     def visit_VariableAccessNode(self, node):
         variable_type = self.type_information[node.variable_name]
-        if variable_type in ("array", "dictionary"):
+        if variable_type in ("array", "dictionary") or variable_type.startswith("class:"):
             raise TypeError(f"Use an index or field to read '{node.variable_name}'")
         variable_pointer = self.variable_pointers[node.variable_name]
         value = self.builder.load(variable_pointer, name=f"{node.variable_name}_value")
@@ -190,15 +319,74 @@ class LLVMCodeGenerator:
 
     def visit_DictionaryAccessNode(self, node):
         if not isinstance(node.dictionary, VariableAccessNode):
-            raise TypeError("Dictionary field access requires a dictionary variable")
-        dictionary_name = node.dictionary.variable_name
-        field_index, field_ty = self.dictionary_information[dictionary_name][node.key]
+            raise TypeError("Field access requires a variable")
+        var_name = node.dictionary.variable_name
+        variable_type = self.type_information.get(var_name)
+        if variable_type == "dictionary":
+            field_information = self.dictionary_information[var_name].get(node.key)
+            if field_information is None:
+                raise NameError(f"Dictionary has no field '{node.key}'")
+            field_index, field_ty = field_information
+            aggregate_pointer = self.variable_pointers[var_name]
+        elif variable_type and variable_type.startswith("class:"):
+            cls_name = variable_type.removeprefix("class:")
+            class_definition = self.class_definitions[cls_name]
+            field_information = class_definition["fields"].get(node.key)
+            if field_information is None:
+                raise NameError(f"Class '{cls_name}' has no field '{node.key}'")
+            field_index, field_ty, _ = field_information
+            aggregate_pointer = self.variable_pointers[var_name]
+        else:
+            raise TypeError(f"'{var_name}' does not have readable fields")
+
         field_pointer = self.builder.gep(
-            self.variable_pointers[dictionary_name],
+            aggregate_pointer,
             [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
-            name=f"{dictionary_name}_{node.key}_pointer",
+            name=f"{var_name}_{node.key}_pointer",
         )
-        return self.builder.load(field_pointer, name=f"{dictionary_name}_{node.key}"), field_ty
+        return self.builder.load(field_pointer, name=f"{var_name}_{node.key}"), field_ty
+
+    def visit_MethodCallNode(self, node):
+        if not isinstance(node.receiver, VariableAccessNode):
+            raise TypeError("Class method calls need an instance variable as the receiver")
+
+        receiver_name = node.receiver.variable_name
+        receiver_type = self.type_information.get(receiver_name)
+        if not receiver_type or not receiver_type.startswith("class:"):
+            raise TypeError(f"'{receiver_name}' is not a class instance")
+
+        cls_name = receiver_type.removeprefix("class:")
+        class_definition = self.class_definitions[cls_name]
+        nested_class_name = class_definition["nested_classes"].get(node.method_name)
+        if nested_class_name is not None:
+            return self.create_class_instance(nested_class_name, node.arguments)
+
+        method_information = self.class_methods.get((cls_name, node.method_name))
+        if method_information is None:
+            raise NameError(f"Class '{cls_name}' has no method or nested class '{node.method_name}'")
+
+        params = method_information["parameters"]
+        if len(node.arguments) != len(params):
+            raise TypeError(
+                f"Method '{cls_name}.{node.method_name}' expects {len(params)} "
+                f"arguments, got {len(node.arguments)}"
+            )
+
+        argument_values = [self.variable_pointers[receiver_name]]
+        for arg, (parameter_name, parameter_type) in zip(node.arguments, params):
+            value, val_ty = self.visit(arg)
+            if val_ty != parameter_type:
+                raise TypeError(
+                    f"Method argument '{parameter_name}' expects {parameter_type}, got {val_ty}"
+                )
+            argument_values.append(value)
+
+        res = self.builder.call(
+            method_information["function"],
+            argument_values,
+            name=f"{receiver_name}_{node.method_name}_result",
+        )
+        return res, method_information["return_type"]
 
     def visit_ForLoopNode(self, node):
         if isinstance(node.iterable, DictionaryAccessNode) and node.iterable.key == "values":
@@ -505,6 +693,13 @@ class LLVMCodeGenerator:
         if node.variable_type is not None and val_ty != node.variable_type:
             raise TypeError(f"Cannot assign {val_ty} to variable '{node.variable_name}' of type {node.variable_type}")
 
+        if isinstance(value, ClassInstanceValue):
+            self.variable_pointers[node.variable_name] = value.pointer
+            self.type_information[node.variable_name] = val_ty
+            self.array_information.pop(node.variable_name, None)
+            self.dictionary_information.pop(node.variable_name, None)
+            return
+
         if isinstance(value, ArrayLiteralValue):
             array_type = ir.ArrayType(self.llvm_type_for(value.element_type), len(value.elements))
             variable_pointer = self.builder.alloca(array_type, name=node.variable_name)
@@ -589,6 +784,10 @@ class LLVMCodeGenerator:
         elif type_name == "float": return self.float_type
         elif type_name == "bool": return self.bool_type
         elif type_name == "str": return self.char_pointer_type
+        elif type_name == "void": return ir.VoidType()
+        elif type_name.startswith("class:"):
+            cls_name = type_name.removeprefix("class:")
+            return self.class_definitions[cls_name]["llvm_type"]
         return self.int32_type
 
     def visit_FunctionDeclarationNode(self, node):
@@ -620,6 +819,13 @@ class LLVMCodeGenerator:
         for stmt in node.body:
             self.visit(stmt)
 
+        if not self.builder.block.is_terminated:
+            if isinstance(return_llvm_type, ir.VoidType):
+                raise SyntaxError(
+                    f"Function '{node.function_name}' must end with 'return : void'"
+                )
+            raise SyntaxError(f"Function '{node.function_name}' must return a value")
+
         self.builder = previous_builder
         self.variable_pointers = previous_variable_pointers
         self.type_information = previous_type_information
@@ -628,14 +834,24 @@ class LLVMCodeGenerator:
         self.type_information[f"function_{node.function_name}"] = node.return_type
 
     def visit_ReturnNode(self, node):
+        function_return_type = self.builder.function.function_type.return_type
+        if node.return_type == "void" or node.expression is None:
+            if not isinstance(function_return_type, ir.VoidType):
+                raise TypeError("A void return can only be used in a void function or method")
+            self.builder.ret_void()
+            return None, "void"
+
         value, val_ty = self.visit(node.expression)
         if node.return_type is not None and val_ty != node.return_type:
             raise TypeError(f"Return annotation expects {node.return_type}, got {val_ty}")
-        if value.type != self.builder.function.function_type.return_type:
+        if value.type != function_return_type:
             raise TypeError(f"Return value of type {val_ty} does not match the function return type")
         self.builder.ret(value)
 
     def visit_FunctionCallNode(self, node):
+        if node.function_name in self.class_definitions:
+            return self.create_class_instance(node.function_name, node.arguments)
+
         fn = self.module.get_global(node.function_name)
         argument_values = []
         for arg in node.arguments:
@@ -645,3 +861,35 @@ class LLVMCodeGenerator:
         ret_ty = self.type_information.get(f"function_{node.function_name}", "int")
         res = self.builder.call(fn, argument_values, name=f"{node.function_name}_result")
         return res, ret_ty
+
+    def create_class_instance(self, class_name, arguments, instance_name=None):
+        class_definition = self.class_definitions.get(class_name)
+        if class_definition is None:
+            raise NameError(f"Class '{class_name}' is not declared")
+
+        field_order = class_definition["field_order"]
+        if len(arguments) != len(field_order):
+            raise TypeError(
+                f"Class '{class_name}' expects {len(field_order)} values, got {len(arguments)}"
+            )
+
+        instance_pointer = self.builder.alloca(
+            class_definition["llvm_type"],
+            name=instance_name or f"{class_name.lower()}_instance",
+        )
+        for field_index, (field_name, arg) in enumerate(zip(field_order, arguments)):
+            value, val_ty = self.visit(arg)
+            _, want_ty, _ = class_definition["fields"][field_name]
+            if val_ty != want_ty:
+                raise TypeError(
+                    f"Field '{field_name}' in class '{class_name}' expects "
+                    f"{want_ty}, got {val_ty}"
+                )
+            field_pointer = self.builder.gep(
+                instance_pointer,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
+                name=f"{field_name}_pointer",
+            )
+            self.builder.store(value, field_pointer)
+
+        return ClassInstanceValue(instance_pointer), f"class:{class_name}"
