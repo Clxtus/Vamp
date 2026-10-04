@@ -23,6 +23,18 @@ class Car : (
 
 )
 
+val x : int = 10
+while (x > 0) : (
+
+    println(x)
+    x-=1
+
+)
+
+println("Current directory exists: " + str(os.Directory_Exists(".")))
+println("Files and folders in the current directory:")
+println("Entries listed: " + str(os.List_Directory(".")))
+
 GTR = Car("Nissan", "GT-R R34", 250.0)
 GTR_Engine = GTR.Engine("V8", 420.0)
 

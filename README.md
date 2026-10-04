@@ -51,19 +51,19 @@ Imports a specified library or a filepath and calls it by the specified name.
 Library used to edit and create files inside the system;
 
     os.Make_Directory(path)
-Creates a directory at the given path.
+Creates the directory and any missing parent directories. Returns `0` on success or a Windows error code on failure.
 
     os.Get_Directory(path)
-Searches for directory using given path.
+Returns the absolute path for an existing directory, resolving relative paths from the program's current working directory. On failure, prints an error and returns an empty string. The returned string is allocated; call `free()` when finished with it.
 
     os.List_Directory(Path)
-Lists all files inside specified directory.
+Prints the names of files and folders inside the specified directory, one per line, and returns the number of entries listed. The `.` and `..` navigation entries are omitted. An invalid path or enumeration error prints a message and returns `-1`.
 
     os.Remove_Directory(path)
-Deletes specified directory and its contents.
+Deletes the specified directory and all its contents without prompting. Returns `true` on success or `false` if the path is invalid or the operation fails.
 
-    Directory.exists()
-Checks if the specified directory exists.
+    os.Directory_Exists(path)
+Returns `true` if the specified path exists and is a directory; otherwise returns `false`.
 
     if (condition) : (
         print("1")
@@ -119,3 +119,13 @@ Arrays contain values of one type and have a fixed size. Read an element with `a
     print(Nissan_engine.hp)
 
 Classes are fixed-layout data types. Declare fields with `val` or `const`, then construct an instance by passing one value per field in declaration order. A nested class is declared inside its parent and constructed through a parent instance, as in `Nissan.engine(...)`. Declare methods with the regular `func` syntax inside the class; methods receive an implicit `self` and are called with `instance.method(arguments)`. The compiler checks constructor and method argument types and stores instances as inline LLVM structs. Method calls use direct native calls, with no object header, boxing, or runtime dispatch. Inheritance is not part of this syntax.
+
+    val x : int = 10
+    while (x > 0) : (
+
+        println(x)
+        x-=1
+
+    )
+
+While conditions must evaluate to `bool` and are checked before every iteration. Loops are lowered directly to LLVM control-flow blocks; compound assignments such as `x-=1` update the existing variable in place.

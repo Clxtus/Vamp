@@ -1,5 +1,5 @@
 from llvmlite import ir
-from parser import ArrayAccessNode, ArrayLiteralNode, ClassDeclarationNode, ClassInstanceDeclarationNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, MethodCallNode, VariableAccessNode
+from parser import ArrayAccessNode, ArrayLiteralNode, AssignmentNode, BinaryOpNode, ClassDeclarationNode, ClassInstanceDeclarationNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, MethodCallNode, VariableAccessNode, WhileLoopNode
 
 class ArrayLiteralValue:
     def __init__(self, elements, element_type):
@@ -26,6 +26,7 @@ class LLVMCodeGenerator:
         self.builder = None
         self.variable_pointers = {}
         self.type_information = {}
+        self.constant_variables = set()
         self.array_information = {}
         self.dictionary_information = {}
         self.class_definitions = {}
@@ -35,6 +36,7 @@ class LLVMCodeGenerator:
         self.string_literal_count = 0
 
         self.int32_type = ir.IntType(32)
+        self.int64_type = ir.IntType(64)
         self.float_type = ir.FloatType()
         self.bool_type = ir.IntType(1)
         self.char_pointer_type = ir.IntType(8).as_pointer()
@@ -74,6 +76,82 @@ class LLVMCodeGenerator:
 
         create_directory_type = ir.FunctionType(self.int32_type, [self.char_pointer_type, self.char_pointer_type, self.char_pointer_type])
         self.create_directory_function = ir.Function(self.module, create_directory_type, name="SHCreateDirectoryExA")
+
+        file_attributes_type = ir.FunctionType(self.int32_type, [self.char_pointer_type])
+        self.get_file_attributes_function = ir.Function(
+            self.module,
+            file_attributes_type,
+            name="GetFileAttributesA",
+        )
+
+        find_first_file_type = ir.FunctionType(
+            self.char_pointer_type,
+            [self.char_pointer_type, self.char_pointer_type],
+        )
+        self.find_first_file_function = ir.Function(
+            self.module,
+            find_first_file_type,
+            name="FindFirstFileA",
+        )
+
+        find_next_file_type = ir.FunctionType(
+            self.int32_type,
+            [self.char_pointer_type, self.char_pointer_type],
+        )
+        self.find_next_file_function = ir.Function(
+            self.module,
+            find_next_file_type,
+            name="FindNextFileA",
+        )
+
+        find_close_type = ir.FunctionType(self.int32_type, [self.char_pointer_type])
+        self.find_close_function = ir.Function(
+            self.module,
+            find_close_type,
+            name="FindClose",
+        )
+
+        get_last_error_type = ir.FunctionType(self.int32_type, [])
+        self.get_last_error_function = ir.Function(
+            self.module,
+            get_last_error_type,
+            name="GetLastError",
+        )
+
+        full_path_type = ir.FunctionType(
+            self.int32_type,
+            [
+                self.char_pointer_type,
+                self.int32_type,
+                self.char_pointer_type,
+                self.char_pointer_type.as_pointer(),
+            ],
+        )
+        self.get_full_path_name_function = ir.Function(
+            self.module,
+            full_path_type,
+            name="GetFullPathNameA",
+        )
+
+        self.file_operation_type = ir.LiteralStructType([
+            self.char_pointer_type,
+            self.int32_type,
+            self.char_pointer_type,
+            self.char_pointer_type,
+            ir.IntType(16),
+            self.int32_type,
+            self.char_pointer_type,
+            self.char_pointer_type,
+        ])
+        file_operation_function_type = ir.FunctionType(
+            self.int32_type,
+            [self.file_operation_type.as_pointer()],
+        )
+        self.file_operation_function = ir.Function(
+            self.module,
+            file_operation_function_type,
+            name="SHFileOperationA",
+        )
 
     def generate_code(self, program):
         class_declarations = [
@@ -121,6 +199,40 @@ class LLVMCodeGenerator:
         self.type_information[node.instance_name] = instance_type
         self.array_information.pop(node.instance_name, None)
         self.dictionary_information.pop(node.instance_name, None)
+
+    def visit_AssignmentNode(self, node):
+        variable_pointer = self.variable_pointers.get(node.variable_name)
+        if node.operator == "=":
+            value, val_ty = self.visit(node.expression)
+            if variable_pointer is None:
+                if not isinstance(value, ClassInstanceValue):
+                    raise NameError(f"Variable '{node.variable_name}' is not declared")
+                self.variable_pointers[node.variable_name] = value.pointer
+                self.type_information[node.variable_name] = val_ty
+                self.array_information.pop(node.variable_name, None)
+                self.dictionary_information.pop(node.variable_name, None)
+                return
+        else:
+            if variable_pointer is None:
+                raise NameError(f"Variable '{node.variable_name}' is not declared")
+            value, val_ty = self.visit(
+                BinaryOpNode(
+                    VariableAccessNode(node.variable_name),
+                    node.operator[0],
+                    node.expression,
+                )
+            )
+
+        if node.variable_name in self.constant_variables:
+            raise TypeError(f"Cannot assign to constant '{node.variable_name}'")
+        want_ty = self.type_information[node.variable_name]
+        if want_ty not in ("int", "float", "bool", "str"):
+            raise TypeError(f"Assignment to values of type '{want_ty}' is not supported")
+        if val_ty != want_ty:
+            raise TypeError(
+                f"Cannot assign {val_ty} to variable '{node.variable_name}' of type {want_ty}"
+            )
+        self.builder.store(value, variable_pointer)
 
     def register_class_tree(self, node, parent_name=None):
         qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
@@ -189,6 +301,7 @@ class LLVMCodeGenerator:
             previous_type_information = self.type_information.copy()
             previous_array_information = self.array_information.copy()
             previous_dictionary_information = self.dictionary_information.copy()
+            previous_constant_variables = self.constant_variables.copy()
 
             fn = method_information["function"]
             entry_block = fn.append_basic_block(name="entry")
@@ -219,6 +332,7 @@ class LLVMCodeGenerator:
             self.type_information = previous_type_information
             self.array_information = previous_array_information
             self.dictionary_information = previous_dictionary_information
+            self.constant_variables = previous_constant_variables
 
         for nested_class in node.nested_classes:
             self.emit_class_methods(nested_class, qualified_name)
@@ -229,21 +343,484 @@ class LLVMCodeGenerator:
 
         if node.library_name == "os":
             if node.method_name == "Make_Directory":
-                path_value, path_type = self.visit(node.arguments[0])
-                if path_type != "str":
-                    raise TypeError("os.Make_Directory expected string path")
+                path_value = self.get_directory_path_argument(node)
+                absolute_path, _ = self.emit_absolute_path(path_value)
                 null_pointer = ir.Constant(self.char_pointer_type, None)
-                res = self.builder.call(self.create_directory_function, [null_pointer, path_value, null_pointer])
+                res = self.builder.call(
+                    self.create_directory_function,
+                    [null_pointer, absolute_path, null_pointer],
+                )
+                self.builder.call(self.free_function, [absolute_path])
                 return res, "int"
-
-        elif node.library_name == "Directory" and node.method_name == "exists":
-            path_value, _ = self.visit(node.arguments[0])
-            null_pointer = ir.Constant(self.char_pointer_type, None)
-            res = self.builder.call(self.create_directory_function, [null_pointer, path_value, null_pointer])
-            exists = self.builder.icmp_signed("==", res, ir.Constant(self.int32_type, -1))
-            return exists, "bool"
+            if node.method_name == "Get_Directory":
+                path_value = self.get_directory_path_argument(node)
+                return self.emit_absolute_directory_path(path_value)
+            if node.method_name == "List_Directory":
+                path_value = self.get_directory_path_argument(node)
+                absolute_path, _ = self.emit_absolute_path(path_value)
+                res = self.emit_directory_listing(absolute_path)
+                self.builder.call(self.free_function, [absolute_path])
+                return res
+            if node.method_name == "Remove_Directory":
+                path_value = self.get_directory_path_argument(node)
+                absolute_path, _ = self.emit_absolute_path(path_value)
+                res = self.emit_directory_removal(absolute_path)
+                self.builder.call(self.free_function, [absolute_path])
+                return res
+            if node.method_name == "Directory_Exists":
+                path_value = self.get_directory_path_argument(node)
+                res = self.builder.call(self.get_file_attributes_function, [path_value])
+                is_valid_path = self.builder.icmp_signed(
+                    "!=",
+                    res,
+                    ir.Constant(self.int32_type, -1),
+                )
+                is_directory = self.builder.icmp_unsigned(
+                    "!=",
+                    self.builder.and_(res, ir.Constant(self.int32_type, 0x10)),
+                    ir.Constant(self.int32_type, 0),
+                )
+                exists = self.builder.and_(is_valid_path, is_directory)
+                return exists, "bool"
 
         raise NotImplementedError(f"Method '{node.library_name}.{node.method_name}' is not implemented.")
+
+    def require_argument_count(self, node, expected_count):
+        if len(node.arguments) != expected_count:
+            raise TypeError(
+                f"{node.library_name}.{node.method_name} expects "
+                f"{expected_count} argument(s), got {len(node.arguments)}"
+            )
+
+    def get_directory_path_argument(self, node):
+        self.require_argument_count(node, 1)
+        path_value, path_type = self.visit(node.arguments[0])
+        if path_type != "str":
+            raise TypeError(
+                f"{node.library_name}.{node.method_name} expected string path"
+            )
+        return path_value
+
+    def emit_absolute_path(self, path_value):
+        fn = self.builder.function
+        max_windows_path_length = 32768
+        path_buffer = self.builder.call(
+            self.malloc_function,
+            [ir.Constant(self.int32_type, max_windows_path_length)],
+            name="absolute_directory_path_buffer",
+        )
+        null_pointer = ir.Constant(self.char_pointer_type, None)
+        null_file_part_pointer = ir.Constant(
+            self.char_pointer_type.as_pointer(),
+            None,
+        )
+        empty_path = self.builder.call(
+            self.malloc_function,
+            [ir.Constant(self.int32_type, 1)],
+            name="empty_path_buffer",
+        )
+        self.builder.store(ir.Constant(ir.IntType(8), 0), empty_path)
+
+        resolved_length = self.builder.call(
+            self.get_full_path_name_function,
+            [
+                path_value,
+                ir.Constant(self.int32_type, max_windows_path_length),
+                path_buffer,
+                null_file_part_pointer,
+            ],
+            name="absolute_path_length",
+        )
+        path_resolved = self.builder.icmp_unsigned(
+            "!=",
+            resolved_length,
+            ir.Constant(self.int32_type, 0),
+        )
+        path_fits_buffer = self.builder.icmp_unsigned(
+            "<",
+            resolved_length,
+            ir.Constant(self.int32_type, max_windows_path_length),
+        )
+        path_is_resolved = self.builder.and_(path_resolved, path_fits_buffer)
+        resolve_error_block = fn.append_basic_block(name="absolute_path_error")
+        success_block = fn.append_basic_block(name="absolute_path_success")
+        merge_block = fn.append_basic_block(name="absolute_path_end")
+        self.builder.cbranch(path_is_resolved, success_block, resolve_error_block)
+
+        self.builder.position_at_end(resolve_error_block)
+        resolve_error_format = self.visit_LiteralNode(
+            LiteralNode("str", "Error: could not resolve absolute path for '%s'\n")
+        )[0]
+        self.builder.call(self.printf_function, [resolve_error_format, path_value])
+        self.builder.call(self.free_function, [path_buffer])
+        self.builder.branch(merge_block)
+        resolve_error_predecessor = self.builder.block
+
+        self.builder.position_at_end(success_block)
+        self.builder.branch(merge_block)
+        success_predecessor = self.builder.block
+
+        self.builder.position_at_end(merge_block)
+        res = self.builder.phi(self.char_pointer_type, name="absolute_path")
+        res.add_incoming(empty_path, resolve_error_predecessor)
+        res.add_incoming(path_buffer, success_predecessor)
+        return res, "str"
+
+    def emit_absolute_directory_path(self, path_value):
+        fn = self.builder.function
+        empty_path = self.builder.call(
+            self.malloc_function,
+            [ir.Constant(self.int32_type, 1)],
+            name="empty_directory_path_buffer",
+        )
+        self.builder.store(ir.Constant(ir.IntType(8), 0), empty_path)
+        attributes = self.builder.call(self.get_file_attributes_function, [path_value])
+        invalid_attributes = self.builder.icmp_signed(
+            "==",
+            attributes,
+            ir.Constant(self.int32_type, -1),
+        )
+        is_directory = self.builder.icmp_unsigned(
+            "!=",
+            self.builder.and_(attributes, ir.Constant(self.int32_type, 0x10)),
+            ir.Constant(self.int32_type, 0),
+        )
+        invalid_path = self.builder.or_(invalid_attributes, self.builder.not_(is_directory))
+        invalid_block = fn.append_basic_block(name="get_directory_invalid")
+        resolve_block = fn.append_basic_block(name="get_directory_resolve")
+        merge_block = fn.append_basic_block(name="get_directory_end")
+        self.builder.cbranch(invalid_path, invalid_block, resolve_block)
+
+        self.builder.position_at_end(invalid_block)
+        error_format = self.visit_LiteralNode(
+            LiteralNode("str", "Error: directory does not exist: '%s'\n")
+        )[0]
+        self.builder.call(self.printf_function, [error_format, path_value])
+        self.builder.branch(merge_block)
+        invalid_predecessor = self.builder.block
+
+        self.builder.position_at_end(resolve_block)
+        absolute_path, _ = self.emit_absolute_path(path_value)
+        self.builder.branch(merge_block)
+        resolve_predecessor = self.builder.block
+
+        self.builder.position_at_end(merge_block)
+        res = self.builder.phi(self.char_pointer_type, name="absolute_directory_path")
+        res.add_incoming(empty_path, invalid_predecessor)
+        res.add_incoming(absolute_path, resolve_predecessor)
+        return res, "str"
+
+    def emit_directory_removal(self, path_value):
+        null_pointer = ir.Constant(self.char_pointer_type, None)
+        path_length = self.builder.call(self.strlen_function, [path_value])
+        buffer_size = self.builder.add(path_length, ir.Constant(self.int32_type, 2))
+        double_null_path = self.builder.call(
+            self.malloc_function,
+            [buffer_size],
+            name="remove_directory_path_buffer",
+        )
+        self.builder.call(self.strcpy_function, [double_null_path, path_value])
+        second_null_pointer = self.builder.gep(
+            double_null_path,
+            [
+                self.builder.add(
+                    path_length,
+                    ir.Constant(self.int32_type, 1),
+                )
+            ],
+            name="remove_directory_path_terminator",
+        )
+        self.builder.store(ir.Constant(ir.IntType(8), 0), second_null_pointer)
+
+        attributes = self.builder.call(self.get_file_attributes_function, [path_value])
+        invalid_attributes = self.builder.icmp_signed(
+            "==",
+            attributes,
+            ir.Constant(self.int32_type, -1),
+        )
+        is_directory = self.builder.icmp_unsigned(
+            "!=",
+            self.builder.and_(attributes, ir.Constant(self.int32_type, 0x10)),
+            ir.Constant(self.int32_type, 0),
+        )
+        invalid_path = self.builder.or_(invalid_attributes, self.builder.not_(is_directory))
+
+        fn = self.builder.function
+        invalid_block = fn.append_basic_block(name="remove_directory_invalid")
+        remove_block = fn.append_basic_block(name="remove_directory_operation")
+        merge_block = fn.append_basic_block(name="remove_directory_end")
+        self.builder.cbranch(invalid_path, invalid_block, remove_block)
+
+        self.builder.position_at_end(invalid_block)
+        error_format = self.visit_LiteralNode(
+            LiteralNode("str", "Error: not a directory or it does not exist: '%s'\n")
+        )[0]
+        self.builder.call(self.printf_function, [error_format, path_value])
+        self.builder.call(self.free_function, [double_null_path])
+        self.builder.branch(merge_block)
+        invalid_predecessor = self.builder.block
+
+        self.builder.position_at_end(remove_block)
+        file_operation = self.builder.alloca(
+            self.file_operation_type,
+            name="remove_directory_file_operation",
+        )
+        delete_operation = ir.Constant(self.int32_type, 3)
+        silent_delete_flags = ir.Constant(ir.IntType(16), 0x414)
+        fields = [
+            null_pointer,
+            delete_operation,
+            double_null_path,
+            null_pointer,
+            silent_delete_flags,
+            ir.Constant(self.int32_type, 0),
+            null_pointer,
+            null_pointer,
+        ]
+        for idx, value in enumerate(fields):
+            field_pointer = self.builder.gep(
+                file_operation,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, idx)],
+            )
+            self.builder.store(value, field_pointer)
+
+        res = self.builder.call(
+            self.file_operation_function,
+            [file_operation],
+            name="remove_directory_result",
+        )
+        self.builder.call(self.free_function, [double_null_path])
+        operation_succeeded = self.builder.icmp_signed(
+            "==",
+            res,
+            ir.Constant(self.int32_type, 0),
+        )
+        error_block = fn.append_basic_block(name="remove_directory_error")
+        success_block = fn.append_basic_block(name="remove_directory_success")
+        self.builder.cbranch(operation_succeeded, success_block, error_block)
+
+        self.builder.position_at_end(error_block)
+        error_format = self.visit_LiteralNode(
+            LiteralNode("str", "Error: could not remove directory '%s' (code %d)\n")
+        )[0]
+        self.builder.call(self.printf_function, [error_format, path_value, res])
+        self.builder.branch(merge_block)
+        error_predecessor = self.builder.block
+
+        self.builder.position_at_end(success_block)
+        self.builder.branch(merge_block)
+        success_predecessor = self.builder.block
+
+        self.builder.position_at_end(merge_block)
+        succeeded = self.builder.phi(self.bool_type, name="remove_directory_succeeded")
+        succeeded.add_incoming(ir.Constant(self.bool_type, 0), invalid_predecessor)
+        succeeded.add_incoming(ir.Constant(self.bool_type, 0), error_predecessor)
+        succeeded.add_incoming(ir.Constant(self.bool_type, 1), success_predecessor)
+        return succeeded, "bool"
+
+    def emit_directory_listing(self, path_value):
+        fn = self.builder.function
+        directory_attribute = ir.Constant(self.int32_type, 0x10)
+        # FindFirstFileA writes the Windows WIN32_FIND_DATAA structure here.
+        find_data_size = 592
+        file_name_offset = 44
+
+        attributes = self.builder.call(self.get_file_attributes_function, [path_value])
+        invalid_attributes = self.builder.icmp_signed(
+            "==",
+            attributes,
+            ir.Constant(self.int32_type, -1),
+        )
+        is_directory = self.builder.icmp_unsigned(
+            "!=",
+            self.builder.and_(attributes, directory_attribute),
+            ir.Constant(self.int32_type, 0),
+        )
+        invalid_path = self.builder.or_(invalid_attributes, self.builder.not_(is_directory))
+
+        error_block = fn.append_basic_block(name="directory_listing_error")
+        search_block = fn.append_basic_block(name="directory_listing_search")
+        empty_block = fn.append_basic_block(name="directory_listing_empty")
+        empty_success_block = fn.append_basic_block(name="directory_listing_empty_success")
+        search_error_block = fn.append_basic_block(name="directory_listing_search_error")
+        entry_block = fn.append_basic_block(name="directory_listing_entry")
+        next_block = fn.append_basic_block(name="directory_listing_next")
+        next_error_check_block = fn.append_basic_block(name="directory_listing_next_error_check")
+        iteration_error_block = fn.append_basic_block(name="directory_listing_iteration_error")
+        print_block = fn.append_basic_block(name="directory_listing_print")
+        skip_block = fn.append_basic_block(name="directory_listing_skip")
+        close_block = fn.append_basic_block(name="directory_listing_close")
+        merge_block = fn.append_basic_block(name="directory_listing_end")
+        self.builder.cbranch(invalid_path, error_block, search_block)
+
+        self.builder.position_at_end(error_block)
+        error_format = self.visit_LiteralNode(
+            LiteralNode("str", "Error: not a directory or it does not exist: '%s'\n")
+        )[0]
+        self.builder.call(self.printf_function, [error_format, path_value])
+        self.builder.branch(merge_block)
+        error_predecessor = self.builder.block
+
+        self.builder.position_at_end(search_block)
+        search_path_length = self.builder.call(self.strlen_function, [path_value])
+        search_path_size = self.builder.add(
+            search_path_length,
+            ir.Constant(self.int32_type, 3),
+        )
+        search_path = self.builder.call(self.malloc_function, [search_path_size])
+        self.builder.call(self.strcpy_function, [search_path, path_value])
+        wildcard_suffix = self.visit_LiteralNode(LiteralNode("str", "\\*"))[0]
+        self.builder.call(self.strcat_function, [search_path, wildcard_suffix])
+
+        find_data_type = ir.ArrayType(ir.IntType(8), find_data_size)
+        find_data = self.builder.alloca(find_data_type, name="directory_find_data")
+        find_data_pointer = self.builder.bitcast(find_data, self.char_pointer_type)
+        find_handle = self.builder.call(
+            self.find_first_file_function,
+            [search_path, find_data_pointer],
+            name="directory_find_handle",
+        )
+        invalid_handle = ir.Constant(self.int64_type, -1).inttoptr(self.char_pointer_type)
+        no_entries = self.builder.icmp_unsigned("==", find_handle, invalid_handle)
+        count_pointer = self.builder.alloca(self.int32_type, name="directory_entry_count")
+        self.builder.store(ir.Constant(self.int32_type, 0), count_pointer)
+        iteration_failed_pointer = self.builder.alloca(
+            self.int32_type,
+            name="directory_iteration_failed",
+        )
+        self.builder.store(ir.Constant(self.int32_type, 0), iteration_failed_pointer)
+        self.builder.cbranch(no_entries, empty_block, entry_block)
+
+        self.builder.position_at_end(empty_block)
+        search_error = self.builder.call(
+            self.get_last_error_function,
+            [],
+            name="directory_listing_search_error_code",
+        )
+        no_matching_files = self.builder.icmp_unsigned(
+            "==",
+            search_error,
+            ir.Constant(self.int32_type, 2),
+        )
+        self.builder.cbranch(no_matching_files, empty_success_block, search_error_block)
+
+        self.builder.position_at_end(empty_success_block)
+        self.builder.call(self.free_function, [search_path])
+        self.builder.branch(merge_block)
+        empty_predecessor = self.builder.block
+
+        self.builder.position_at_end(search_error_block)
+        search_error_format = self.visit_LiteralNode(
+            LiteralNode("str", "Error: could not list directory '%s' (code %d)\n")
+        )[0]
+        self.builder.call(
+            self.printf_function,
+            [search_error_format, path_value, search_error],
+        )
+        self.builder.call(self.free_function, [search_path])
+        self.builder.branch(merge_block)
+        search_error_predecessor = self.builder.block
+
+        self.builder.position_at_end(entry_block)
+        file_name_pointer = self.builder.gep(
+            find_data_pointer,
+            [ir.Constant(self.int32_type, file_name_offset)],
+            name="directory_entry_name",
+        )
+        current_name = file_name_pointer
+        dot_name = self.visit_LiteralNode(LiteralNode("str", "."))[0]
+        dot_dot_name = self.visit_LiteralNode(LiteralNode("str", ".."))[0]
+        is_dot = self.builder.icmp_signed(
+            "==",
+            self.builder.call(self.strcmp_function, [current_name, dot_name]),
+            ir.Constant(self.int32_type, 0),
+        )
+        is_dot_dot = self.builder.icmp_signed(
+            "==",
+            self.builder.call(self.strcmp_function, [current_name, dot_dot_name]),
+            ir.Constant(self.int32_type, 0),
+        )
+        is_navigation_entry = self.builder.or_(is_dot, is_dot_dot)
+        self.builder.cbranch(is_navigation_entry, skip_block, print_block)
+
+        self.builder.position_at_end(print_block)
+        line_format = self.visit_LiteralNode(LiteralNode("str", "%s\n"))[0]
+        self.builder.call(self.printf_function, [line_format, current_name])
+        cnt = self.builder.load(count_pointer, name="directory_entry_count_value")
+        self.builder.store(
+            self.builder.add(cnt, ir.Constant(self.int32_type, 1)),
+            count_pointer,
+        )
+        self.builder.branch(next_block)
+
+        self.builder.position_at_end(skip_block)
+        self.builder.branch(next_block)
+
+        self.builder.position_at_end(next_block)
+        has_next_entry = self.builder.call(
+            self.find_next_file_function,
+            [find_handle, find_data_pointer],
+            name="directory_has_next_entry",
+        )
+        has_next_entry = self.builder.icmp_signed(
+            "!=",
+            has_next_entry,
+            ir.Constant(self.int32_type, 0),
+        )
+        self.builder.cbranch(has_next_entry, entry_block, next_error_check_block)
+
+        self.builder.position_at_end(next_error_check_block)
+        iteration_error = self.builder.call(
+            self.get_last_error_function,
+            [],
+            name="directory_listing_iteration_error_code",
+        )
+        no_more_files = self.builder.icmp_unsigned(
+            "==",
+            iteration_error,
+            ir.Constant(self.int32_type, 18),
+        )
+        self.builder.cbranch(no_more_files, close_block, iteration_error_block)
+
+        self.builder.position_at_end(iteration_error_block)
+        iteration_error_format = self.visit_LiteralNode(
+            LiteralNode("str", "Error: could not continue listing directory '%s' (code %d)\n")
+        )[0]
+        self.builder.call(
+            self.printf_function,
+            [iteration_error_format, path_value, iteration_error],
+        )
+        self.builder.store(ir.Constant(self.int32_type, 1), iteration_failed_pointer)
+        self.builder.branch(close_block)
+
+        self.builder.position_at_end(close_block)
+        self.builder.call(self.find_close_function, [find_handle])
+        self.builder.call(self.free_function, [search_path])
+        listed_count = self.builder.load(count_pointer, name="listed_directory_entry_count")
+        iteration_failed = self.builder.load(
+            iteration_failed_pointer,
+            name="directory_iteration_failed_value",
+        )
+        listing_succeeded = self.builder.icmp_unsigned(
+            "==",
+            iteration_failed,
+            ir.Constant(self.int32_type, 0),
+        )
+        listing_result = self.builder.select(
+            listing_succeeded,
+            listed_count,
+            ir.Constant(self.int32_type, -1),
+        )
+        self.builder.branch(merge_block)
+        close_predecessor = self.builder.block
+
+        self.builder.position_at_end(merge_block)
+        res = self.builder.phi(self.int32_type, name="directory_listing_result")
+        res.add_incoming(ir.Constant(self.int32_type, -1), error_predecessor)
+        res.add_incoming(ir.Constant(self.int32_type, 0), empty_predecessor)
+        res.add_incoming(ir.Constant(self.int32_type, -1), search_error_predecessor)
+        res.add_incoming(listing_result, close_predecessor)
+        return res, "int"
 
     def visit_LiteralNode(self, node):
         if node.literal_type == "int":
@@ -434,12 +1011,44 @@ class LLVMCodeGenerator:
             return
         raise TypeError(f"For loops cannot iterate over values of type '{iterable_type}'")
 
+    def visit_WhileLoopNode(self, node):
+        fn = self.builder.function
+        condition_block = fn.append_basic_block(name="while_condition")
+        body_block = fn.append_basic_block(name="while_body")
+        end_block = fn.append_basic_block(name="while_end")
+        self.builder.branch(condition_block)
+
+        self.builder.position_at_end(condition_block)
+        condition_value, condition_type = self.visit(node.condition)
+        if condition_type != "bool":
+            raise TypeError(f"while condition must be bool, got {condition_type}")
+        self.builder.cbranch(condition_value, body_block, end_block)
+
+        self.builder.position_at_end(body_block)
+        visible_variable_pointers = self.variable_pointers.copy()
+        visible_type_information = self.type_information.copy()
+        visible_array_information = self.array_information.copy()
+        visible_dictionary_information = self.dictionary_information.copy()
+        visible_constant_variables = self.constant_variables.copy()
+        for stmt in node.body:
+            self.visit(stmt)
+        if not self.builder.block.is_terminated:
+            self.builder.branch(condition_block)
+
+        self.variable_pointers = visible_variable_pointers
+        self.type_information = visible_type_information
+        self.array_information = visible_array_information
+        self.dictionary_information = visible_dictionary_information
+        self.constant_variables = visible_constant_variables
+        self.builder.position_at_end(end_block)
+
     def emit_dictionary_value_loop(self, dictionary_name, item_name, body):
         dictionary_pointer = self.variable_pointers[dictionary_name]
         saved_variable_pointers = self.variable_pointers.copy()
         saved_type_information = self.type_information.copy()
         saved_array_information = self.array_information.copy()
         saved_dictionary_information = self.dictionary_information.copy()
+        saved_constant_variables = self.constant_variables.copy()
 
         for field_name, (field_index, field_ty) in self.dictionary_information[dictionary_name].items():
             field_pointer = self.builder.gep(
@@ -461,11 +1070,13 @@ class LLVMCodeGenerator:
             self.type_information = saved_type_information.copy()
             self.array_information = saved_array_information.copy()
             self.dictionary_information = saved_dictionary_information.copy()
+            self.constant_variables = saved_constant_variables.copy()
 
         self.variable_pointers = saved_variable_pointers
         self.type_information = saved_type_information
         self.array_information = saved_array_information
         self.dictionary_information = saved_dictionary_information
+        self.constant_variables = saved_constant_variables
 
     def materialize_array(self, array_value, array_name):
         array_type = ir.ArrayType(self.llvm_type_for(array_value.element_type), len(array_value.elements))
@@ -511,6 +1122,7 @@ class LLVMCodeGenerator:
         saved_type_information = self.type_information.copy()
         saved_array_information = self.array_information.copy()
         saved_dictionary_information = self.dictionary_information.copy()
+        saved_constant_variables = self.constant_variables.copy()
         self.variable_pointers[item_name] = item_pointer
         self.type_information[item_name] = element_type
         self.array_information.pop(item_name, None)
@@ -529,6 +1141,7 @@ class LLVMCodeGenerator:
         self.type_information = saved_type_information
         self.array_information = saved_array_information
         self.dictionary_information = saved_dictionary_information
+        self.constant_variables = saved_constant_variables
         self.builder.position_at_end(end_block)
 
     def visit_BinaryOpNode(self, node):
@@ -596,6 +1209,7 @@ class LLVMCodeGenerator:
         visible_type_information = self.type_information.copy()
         visible_array_information = self.array_information.copy()
         visible_dictionary_information = self.dictionary_information.copy()
+        visible_constant_variables = self.constant_variables.copy()
 
         for cond, body in node.branches:
             condition_value, condition_type = self.visit(cond)
@@ -616,6 +1230,7 @@ class LLVMCodeGenerator:
             self.type_information = visible_type_information.copy()
             self.array_information = visible_array_information.copy()
             self.dictionary_information = visible_dictionary_information.copy()
+            self.constant_variables = visible_constant_variables.copy()
             self.builder.position_at_end(next_branch_block)
 
         if node.else_body is not None:
@@ -628,6 +1243,7 @@ class LLVMCodeGenerator:
         self.type_information = visible_type_information
         self.array_information = visible_array_information
         self.dictionary_information = visible_dictionary_information
+        self.constant_variables = visible_constant_variables
         self.builder.position_at_end(merge_block)
 
     def visit_CastNode(self, node):
@@ -692,6 +1308,11 @@ class LLVMCodeGenerator:
         value, val_ty = self.visit(node.initializer)
         if node.variable_type is not None and val_ty != node.variable_type:
             raise TypeError(f"Cannot assign {val_ty} to variable '{node.variable_name}' of type {node.variable_type}")
+
+        if node.is_constant:
+            self.constant_variables.add(node.variable_name)
+        else:
+            self.constant_variables.discard(node.variable_name)
 
         if isinstance(value, ClassInstanceValue):
             self.variable_pointers[node.variable_name] = value.pointer
@@ -796,6 +1417,7 @@ class LLVMCodeGenerator:
         previous_type_information = self.type_information.copy()
         previous_array_information = self.array_information.copy()
         previous_dictionary_information = self.dictionary_information.copy()
+        previous_constant_variables = self.constant_variables.copy()
 
         parameter_types = [self.llvm_type_for(parameter_type) for _, parameter_type in node.parameters]
         return_llvm_type = self.llvm_type_for(node.return_type)
@@ -831,6 +1453,7 @@ class LLVMCodeGenerator:
         self.type_information = previous_type_information
         self.array_information = previous_array_information
         self.dictionary_information = previous_dictionary_information
+        self.constant_variables = previous_constant_variables
         self.type_information[f"function_{node.function_name}"] = node.return_type
 
     def visit_ReturnNode(self, node):

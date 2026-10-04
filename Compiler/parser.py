@@ -24,6 +24,17 @@ class ForLoopNode(ASTNode):
         self.iterable = iterable
         self.body = body
 
+class WhileLoopNode(ASTNode):
+    def __init__(self, condition, body):
+        self.condition = condition
+        self.body = body
+
+class AssignmentNode(ASTNode):
+    def __init__(self, variable_name, operator, expression):
+        self.variable_name = variable_name
+        self.operator = operator
+        self.expression = expression
+
 class ArrayLiteralNode(ASTNode):
     def __init__(self, elements):
         self.elements = elements
@@ -176,6 +187,9 @@ class Parser:
         elif current_token.kind == "KEYWORD" and current_token.text == "for":
             return self.parse_for_loop()
 
+        elif current_token.kind == "KEYWORD" and current_token.text == "while":
+            return self.parse_while_loop()
+
         elif current_token.kind == "IDENTIFIER" and current_token.text == "func":
             return self.parse_function_declaration()
 
@@ -209,9 +223,9 @@ class Parser:
             if (
                 self.position + 1 < len(self.tokens)
                 and self.tokens[self.position + 1].kind == "OPERATOR"
-                and self.tokens[self.position + 1].text == "="
+                and self.tokens[self.position + 1].text in ("=", "+=", "-=", "*=", "/=")
             ):
-                return self.parse_class_instance_declaration()
+                return self.parse_assignment_or_class_instance()
 
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "DOT":
                 receiver_name = self.consume("IDENTIFIER").text
@@ -276,13 +290,11 @@ class Parser:
             raise SyntaxError(f"Class '{cls_name}' must declare a field, nested class, or method")
         return ClassDeclarationNode(cls_name, fields, nested_classes, meths)
 
-    def parse_class_instance_declaration(self):
-        instance_name = self.consume("IDENTIFIER").text
-        self.consume("OPERATOR", "=")
+    def parse_assignment_or_class_instance(self):
+        var_name = self.consume("IDENTIFIER").text
+        operator = self.consume("OPERATOR").text
         initializer = self.parse_expression()
-        if not isinstance(initializer, (FunctionCallNode, MethodCallNode)):
-            raise SyntaxError("Class instances must be initialized with a class constructor call")
-        return ClassInstanceDeclarationNode(instance_name, initializer)
+        return AssignmentNode(var_name, operator, initializer)
 
     def parse_call_arguments(self):
         args = []
@@ -339,6 +351,12 @@ class Parser:
         self.consume("RPAREN")
         self.consume("COLON")
         return ForLoopNode(item_name, iterable, self.parse_block())
+
+    def parse_while_loop(self):
+        self.consume("KEYWORD", "while")
+        cond = self.parse_parenthesized_condition()
+        self.consume("COLON")
+        return WhileLoopNode(cond, self.parse_block())
 
     def parse_function_declaration(self):
         self.consume("IDENTIFIER", "func")
