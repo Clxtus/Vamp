@@ -43,10 +43,31 @@ class DictionaryLiteralNode(ASTNode):
     def __init__(self, entries):
         self.entries = entries
 
+class WindowSizeNode(ASTNode):
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+class WindowConfigNode(ASTNode):
+    def __init__(self, properties):
+        self.properties = properties
+
 class ArrayAccessNode(ASTNode):
     def __init__(self, array, index):
         self.array = array
         self.index = index
+
+class ArrayAssignmentNode(ASTNode):
+    def __init__(self, array, index, operator, expression):
+        self.array = array
+        self.index = index
+        self.operator = operator
+        self.expression = expression
+
+class MallocNode(ASTNode):
+    def __init__(self, element_type, count):
+        self.element_type = element_type
+        self.count = count
 
 class DictionaryAccessNode(ASTNode):
     def __init__(self, dictionary, key):
@@ -97,6 +118,13 @@ class VariableDeclarationNode(ASTNode):
         self.variable_name = variable_name
         self.variable_type = variable_type
         self.initializer = initializer
+
+class GroupVariableDeclarationNode(ASTNode):
+    def __init__(self, is_constant, variable_names, variable_type, initializers):
+        self.is_constant = is_constant
+        self.variable_names = variable_names
+        self.variable_type = variable_type
+        self.initializers = initializers
 
 class PrintNode(ASTNode):
     def __init__(self, expression, newline=True):
@@ -220,6 +248,24 @@ class Parser:
             return ReturnNode(expr, ret_ty)
 
         elif current_token.kind == "IDENTIFIER":
+            if (
+                self.position + 1 < len(self.tokens)
+                and self.tokens[self.position + 1].kind == "LBRACKET"
+            ):
+                array = VariableAccessNode(self.consume("IDENTIFIER").text)
+                self.consume("LBRACKET")
+                idx = self.parse_expression()
+                self.consume("RBRACKET")
+                if (
+                    self.peek()
+                    and self.peek().kind == "OPERATOR"
+                    and self.peek().text in ("=", "+=", "-=", "*=", "/=")
+                ):
+                    operator = self.consume("OPERATOR").text
+                    expr = self.parse_expression()
+                    return ArrayAssignmentNode(array, idx, operator, expr)
+                raise SyntaxError("Indexed values can only be used in assignments as statements")
+
             if (
                 self.position + 1 < len(self.tokens)
                 and self.tokens[self.position + 1].kind == "OPERATOR"
@@ -411,18 +457,45 @@ class Parser:
     def parse_variable_declaration(self):
         declaration_keyword = self.consume("KEYWORD").text
         is_constant = declaration_keyword == "const"
-        var_name = self.consume("IDENTIFIER").text
+        variable_names = [self.consume("IDENTIFIER").text]
+        while self.peek() and self.peek().kind == "COMMA":
+            self.consume("COMMA")
+            variable_names.append(self.consume("IDENTIFIER").text)
+
         variable_type = None
         if self.peek() and self.peek().kind == "COLON":
             self.consume("COLON")
             variable_type = self.consume("TYPE").text
-            self.consume("OPERATOR", "=")
-        elif declaration_keyword == "val":
-            self.consume("OPERATOR", "=")
-        else:
+        elif is_constant:
             raise SyntaxError("const declarations require an explicit type")
-        initializer = self.parse_expression()
-        return VariableDeclarationNode(is_constant, var_name, variable_type, initializer)
+        elif len(variable_names) > 1:
+            raise SyntaxError("Grouped declarations require an explicit type")
+
+        has_initializer = self.peek() and self.peek().kind == "OPERATOR" and self.peek().text == "="
+        if has_initializer:
+            self.consume("OPERATOR", "=")
+            initializers = [self.parse_expression()]
+            while self.peek() and self.peek().kind == "COMMA":
+                self.consume("COMMA")
+                initializers.append(self.parse_expression())
+        else:
+            initializers = None
+            if is_constant:
+                raise SyntaxError("const declarations require an initializer")
+
+        if len(variable_names) == 1 and initializers is not None:
+            return VariableDeclarationNode(
+                is_constant,
+                variable_names[0],
+                variable_type,
+                initializers[0],
+            )
+        return GroupVariableDeclarationNode(
+            is_constant,
+            variable_names,
+            variable_type,
+            initializers,
+        )
 
     def parse_expression(self):
         left = self.parse_additive_expression()
@@ -478,6 +551,19 @@ class Parser:
             return CastNode(tgt_ty, expr)
         elif current_token.kind == "LPAREN":
             self.consume("LPAREN")
+            if (
+                self.peek()
+                and (
+                    self.peek().kind == "RPAREN"
+                    or (
+                        self.peek().kind == "IDENTIFIER"
+                        and self.position + 1 < len(self.tokens)
+                        and self.tokens[self.position + 1].kind == "OPERATOR"
+                        and self.tokens[self.position + 1].text == "="
+                    )
+                )
+            ):
+                return self.parse_window_configuration("RPAREN")
             expr = self.parse_expression()
             self.consume("RPAREN")
             return expr
@@ -493,6 +579,13 @@ class Parser:
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "LPAREN":
                 function_name = self.consume("IDENTIFIER").text
                 self.consume("LPAREN")
+                if function_name == "malloc":
+                    elem_ty = self.consume("TYPE").text
+                    self.consume("COMMA")
+                    cnt = self.parse_expression()
+                    self.consume("RPAREN")
+                    return MallocNode(elem_ty, cnt)
+
                 args = []
                 if self.peek() and self.peek().kind != "RPAREN":
                     args.append(self.parse_expression())
@@ -538,3 +631,26 @@ class Parser:
         self.consume("OPERATOR", "=")
         value = self.parse_expression()
         return key, val_ty, value
+
+    def parse_window_configuration(self, closing_token):
+        properties = {}
+        while self.peek() and self.peek().kind != closing_token:
+            property_name = self.consume("IDENTIFIER").text
+            if property_name in properties:
+                raise SyntaxError(f"Duplicate window property '{property_name}'")
+            self.consume("OPERATOR", "=")
+            if property_name == "size":
+                self.consume("LPAREN")
+                width = self.parse_expression()
+                self.consume("COMMA")
+                height = self.parse_expression()
+                self.consume("RPAREN")
+                properties[property_name] = WindowSizeNode(width, height)
+            else:
+                properties[property_name] = self.parse_expression()
+            if self.peek() and self.peek().kind == "COMMA":
+                self.consume("COMMA")
+            elif self.peek() and self.peek().kind != closing_token:
+                raise SyntaxError("Window properties must be separated by commas")
+        self.consume(closing_token)
+        return WindowConfigNode(properties)

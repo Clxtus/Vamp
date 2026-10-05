@@ -8,6 +8,10 @@ Creates a new variable and assigns its type and value.
     const x : int = 10
 Creates a new constant and assigns its type and value.
 
+    val x, y, z : int = 10, 20, 30
+    val first, second, third : int
+Grouped declarations share one type. Initializers are assigned in order and must match the number of names. Without initializers, `val` variables start at the type default (`0`, `0.0`, `false`, or `""`).
+
     int: integer
     str: string
     float: float
@@ -38,8 +42,12 @@ Use "+" symbol to add to the exporession: println("Hello World" + x).
     exit(code)
 Terminates current program with a given exit code.
 
+    val pointer = malloc(int, 4)
+    pointer[0] = 42
+    println(pointer[0])
     free(pointer)
-Deallocates dynamically allocated memory pointers.
+
+`malloc(type, count)` allocates uninitialized native storage for `count` elements of type `int`, `float`, `bool`, or `str`; it returns a typed pointer that can be indexed and assigned like `pointer[index]`. The element count must be positive. Initialize elements before reading them, and call `free(pointer)` once when finished. Like raw native pointers, pointer indexing is not bounds-checked; never read, write, or free a pointer after it has been freed.
 
     import name : "filepath"
     import library
@@ -64,6 +72,38 @@ Deletes the specified directory and all its contents without prompting. Returns 
 
     os.Directory_Exists(path)
 Returns `true` if the specified path exists and is a directory; otherwise returns `false`.
+
+    os.Make_Window(title, configuration)
+Creates an empty, visible native Windows window with the given title and returns `true` on success. The optional settings use a parenthesized list of plain property names. Every setting is optional, and the entire settings list can be omitted:
+
+- `icon = "path"`: image file used as the window icon. Supports ICO, PNG, and JPEG files; the path is resolved from the program's working directory.
+- `size = (width, height)`: positive dimensions in pixels for windowed and borderless windows.
+- `resizable = true` or `false`: enables or disables resizing for windowed/maximized styles.
+- `type = "Windowed"`, `"Full Screen"`, `"Maximized"`, or `"Borderless"`: selects the native window style. Full Screen fills the primary display; Maximized uses the normal maximized window state.
+
+The window stays open while the Vamp program runs and closes when the user closes it or `os.Remove_Window(title)` is called. Omitting configuration keeps the default resizable 800x600 window.
+
+    os.Launch_Window(executable_path)
+Launches an existing executable or application path as a separate program, allowing it to create its own window. Returns `true` if Windows accepted the launch; otherwise prints the Windows error code and returns `false`.
+
+    os.Remove_Window(title)
+Closes visible top-level windows whose title matches, case-insensitively, by sending the standard close message. The application can handle or ignore the request. Returns `true` if a close request was sent.
+
+    os.Get_Window(title)
+Returns `true` if a visible top-level window with the matching title exists; otherwise returns `false`.
+
+    os.List_Windows()
+Prints the titles of visible top-level windows, one per line, and returns the number listed.
+
+    import os
+    println("Window created: " + str(os.Make_Window("Vamp Demo", (
+        icon = "assets/app.png",
+        size = (1280, 720),
+        resizable = true,
+        type = "Windowed"
+    ))))
+
+`Make_Window` creates an empty GUI window, not a terminal. It returns after the window is visible; if the program reaches its end while windows remain open, it waits until they are closed. Use `Launch_Window` to run an existing executable. `Get_Window` and `Remove_Window` match window titles, not process names.
 
     if (condition) : (
         print("1")

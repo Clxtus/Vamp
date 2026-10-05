@@ -11,6 +11,7 @@
     { "include": "#for-loop" },
     { "include": "#variable-declarations" },
     { "include": "#library-function-calls" },
+    { "include": "#window-properties" },
     { "include": "#dictionary-properties" },
     { "include": "#built-in-functions" },
     { "include": "#keywords" },
@@ -107,7 +108,7 @@
       "patterns": [
         {
           "name": "meta.function-call.vamp",
-          "match": "\\b(os)(\\s*\\.\\s*)(Make_Directory|Get_Directory|List_Directory|Remove_Directory|Directory_Exists)(?=\\s*\\()",
+          "match": "\\b(os)(\\s*\\.\\s*)(Make_Directory|Get_Directory|List_Directory|Remove_Directory|Directory_Exists|Make_Window|Launch_Window|Remove_Window|Get_Window|List_Windows)(?=\\s*\\()",
           "captures": {
             "1": { "name": "entity.name.namespace.vamp" },
             "2": { "name": "punctuation.accessor.vamp" },
@@ -124,6 +125,17 @@
           "captures": {
             "1": { "name": "punctuation.accessor.vamp" },
             "2": { "name": "variable.other.property.vamp" }
+          }
+        }
+      ]
+    },
+    "window-properties": {
+      "patterns": [
+        {
+          "name": "meta.window-property.vamp",
+          "match": "\\b(icon|size|resizable|type)(?=\\s*=)",
+          "captures": {
+            "1": { "name": "variable.other.property.vamp" }
           }
         }
       ]

@@ -1,44 +1,191 @@
 import os
 
+func add_numbers(left : int, right : int) : (
+    return : int (left + right)
+)
+
 class Car : (
 
     val Brand : str
     val Model : str
-    const max_Speed : float
+    val Color : str
+    const Max_Speed : int
 
     class Engine : (
 
-        val type : str
-        val hp : float
+        const engine_type : str
+        const hp : float
 
+    )
+
+    func max_speed_bonus(bonus : int) : (
+        return : int (self.Max_Speed + bonus)
     )
 
     func Start() : (
-    
-        println("CAR STARTED")
-
+        println("Engine started")
         return : void
-
     )
 
 )
 
-val x : int = 10
-while (x > 0) : (
+println("=== Primitive values, casts, and expressions ===")
+val count : int = 10
+const greeting : str = "Hello"
+val speed : float = 67.5
+val is_ready : bool = true
+val x, y, z : int = 10, 20, 30
+val first, second, third : int
+println("Grouped initialized values: " + str(x) + ", " + str(y) + ", " + str(z))
+println("Grouped defaults: " + str(first) + ", " + str(second) + ", " + str(third))
+first = x
+second = y
+third = x + y
+println("Grouped reassigned values: " + str(first) + ", " + str(second) + ", " + str(third))
+println(greeting + ", Vamp!")
+println("int: " + str(count))
+println("float: " + str(speed))
+println("bool: " + str(is_ready))
+println("cast string to int: " + str(int("42")))
+println("cast string to float: " + str(float("3.5")))
+println("cast int to bool: " + str(bool(1)))
+println("cast float to int: " + str(int(3.5)))
+println("cast bool to int: " + str(int(true)))
+println("cast int to float: " + str(float(3)))
+println("cast bool to float: " + str(float(true)))
+println("cast float to bool: " + str(bool(3.5)))
+println("cast string to bool: " + str(bool("true")))
+println("arithmetic: " + str(add_numbers(7, 5) * 2))
+println("integer subtraction and division: " + str((10 - 4) / 2))
+println("float arithmetic: " + str(speed + 2.5))
+print("print stays on this line; ")
+println("println ends it")
 
-    println(x)
-    x-=1
-
+println("=== Functions and if / else if / else ===")
+val score : int = 95
+if (score >= 90) : (
+    println("Score 95: A")
+)
+else if (score >= 80) : (
+    println("Score 95: B")
+)
+else: (
+    println("Score 95: Keep practicing")
+)
+score = 83
+if (score >= 90) : (
+    println("Score 83: A")
+)
+else if (score >= 80) : (
+    println("Score 83: B")
+)
+else: (
+    println("Score 83: Keep practicing")
+)
+score = 60
+if (score >= 90) : (
+    println("Score 60: A")
+)
+else if (score >= 80) : (
+    println("Score 60: B")
+)
+else: (
+    println("Score 60: Keep practicing")
+)
+println(
+    "Comparison operators (==, !=, <, <=, >, >=): "
+    + str(score == 60) + ", "
+    + str(score != 95) + ", "
+    + str(score < 61) + ", "
+    + str(score <= 60) + ", "
+    + str(score > 59) + ", "
+    + str(score >= 60)
+)
+if (greeting < "Vamp") : (
+    println("String comparison: greeting sorts first")
+)
+else: (
+    println("String comparison: greeting sorts second")
+)
+if (is_ready == true) : (
+    println("Boolean comparison: ready")
 )
 
-println("Current directory exists: " + str(os.Directory_Exists(".")))
-println("Files and folders in the current directory:")
-println("Entries listed: " + str(os.List_Directory(".")))
+println("=== While loop and compound assignment ===")
+val countdown : int = 3
+while (countdown > 0) : (
+    print(str(countdown) + " ")
+    countdown-=1
+)
+println("done")
 
-GTR = Car("Nissan", "GT-R R34", 250.0)
+println("=== Arrays and for loops ===")
+val colors = ["red", "green", "blue"]
+println("Indexed array value: " + colors[1])
+for (color) in (colors) : (
+    println("Array item: " + color)
+)
+for (letter) in (["V", "P"]) : (
+    print(letter)
+)
+println("")
+
+println("=== Dictionaries and field access ===")
+val car_info = {Brand : str = "Nissan", Year : int = 1999}
+println("Dictionary field: " + car_info.Brand)
+for (field_name) in (car_info) : (
+    println("Dictionary key: " + field_name)
+)
+for (field_value) in (car_info.values) : (
+    println("Dictionary value: " + str(field_value))
+)
+
+println("=== Classes, nested classes, and methods ===")
+GTR = Car("Nissan", "GT-R R34", "red", 250)
 GTR_Engine = GTR.Engine("V8", 420.0)
-
-println(GTR.Brand + " " + GTR.Model)
+println("Car: " + GTR.Brand + " " + GTR.Model + " (" + GTR.Color + ")")
+println("Engine: " + GTR_Engine.engine_type + ", " + str(GTR_Engine.hp) + " hp")
+println("Speed with bonus: " + str(GTR.max_speed_bonus(10)))
 GTR.Start()
 
-exit(0)
+println("=== OS library ===")
+println("Current directory exists: " + str(os.Directory_Exists(".")))
+val demo_window_title : str = "Vamp API Showcase"
+println("Created native window: " + str(os.Make_Window(demo_window_title, (
+    icon = "../vamp-icon.ico",
+    size = (640, 480),
+    resizable = true,
+    type = "Windowed"
+))))
+println("Window lookup: " + str(os.Get_Window(demo_window_title)))
+println("Visible window titles:")
+val visible_window_count : int = os.List_Windows()
+println("Visible window count: " + str(visible_window_count))
+println("Closed native window: " + str(os.Remove_Window(demo_window_title)))
+val current_directory : str = os.Get_Directory(".")
+println("Current directory: " + current_directory)
+free(current_directory)
+
+val demo_directory : str = "Vamp_test_demo_output"
+if (os.Directory_Exists(demo_directory)) : (
+    println("Skipping directory create/remove demo: " + demo_directory + " already exists")
+)
+else: (
+    val create_result : int = os.Make_Directory(demo_directory)
+    if (create_result == 0) : (
+        println("Created demo directory")
+        println("Directory entries: " + str(os.List_Directory(demo_directory)))
+        println("Removed demo directory: " + str(os.Remove_Directory(demo_directory)))
+    )
+    else: (
+        println("Could not create demo directory; error code: " + str(create_result))
+    )
+)
+
+println("=== Typed native pointers ===")
+val samples = malloc(int, 3)
+samples[0] = 10
+samples[1] = 20
+samples[2] = samples[0] + samples[1]
+println("Allocated values: " + str(samples[0]) + ", " + str(samples[1]) + ", " + str(samples[2]))
+free(samples)

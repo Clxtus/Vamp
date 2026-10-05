@@ -54,7 +54,18 @@ def compile_file(source_filepath):
     print(f"[2/2] Building native binary '{exe_filename}' via Clang RAM Pipe...")
 
     # FIXED: Move '-x' 'ir' BEFORE the '-' so Clang explicitly expects IR syntax from stdin
-    clang_cmd = [clang_bin, "-x", "ir", "-", "-O3", "-o", exe_filename, "-lshell32"]
+    clang_cmd = [
+        clang_bin,
+        "-x",
+        "ir",
+        "-",
+        "-O3",
+        "-o",
+        exe_filename,
+        "-lshell32",
+        "-luser32",
+        "-lgdiplus",
+    ]
     
     try:
         # Stream the LLVM IR string straight into system RAM (input=llvm_ir)
