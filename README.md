@@ -1,5 +1,11 @@
 # **DOCUMENTATION**
 
+> ## **VS CODE SUPPORT**
+
+The `vamp-vscode` folder contains the Vamp language extension. Open that folder in VS Code and run **Developer: Install Extension from Location...** from the Command Palette to load it for development, or package it with `vsce package` and install the resulting VSIX. The extension associates `.vp` files with Vamp syntax highlighting and line/block comment commands, while Explorer keeps the active VS Code file icon theme for every file type.
+
+Vamp comments can be written with either `//` for the rest of the line or `/* ... */` for a block.
+
 > ## **SYNTAX**
 
     val x : int = 10

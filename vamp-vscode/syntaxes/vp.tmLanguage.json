@@ -1,11 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Vamp",
-  "scopeName": "source.vp",
+  "scopeName": "source.vamp",
   "patterns": [
-    { "include": "#comments" },
+    { "include": "#block-comments" },
+    { "include": "#line-comments" },
     { "include": "#strings" },
-    { "include": "#while-keyword" },
     { "include": "#function-declarations" },
     { "include": "#class-declarations" },
     { "include": "#for-loop" },
@@ -34,14 +34,6 @@
             "1": { "name": "keyword.control.vamp" },
             "3": { "name": "entity.name.type.class.vamp" }
           }
-        }
-      ]
-    },
-    "while-keyword": {
-      "patterns": [
-        {
-          "name": "keyword.control.vamp",
-          "match": "\\bwhile\\b"
         }
       ]
     },
@@ -144,7 +136,7 @@
       "patterns": [
         {
           "name": "support.function.builtin.vamp",
-          "match": "\\b(exit|free|print|println)(?=\\s*\\()"
+          "match": "\\b(exit|free|malloc|print|println)(?=\\s*\\()"
         }
       ]
     },
@@ -152,7 +144,7 @@
       "patterns": [
         {
           "name": "keyword.control.vamp",
-          "match": "\\b(import|val|const|func|return|if|else|for|in|class)\\b"
+          "match": "\\b(import|val|const|func|return|if|else|for|in|while|class)\\b"
         },
         {
           "name": "constant.language.boolean.vamp",
@@ -172,7 +164,7 @@
       "patterns": [
         {
           "name": "storage.type.vamp",
-          "match": "\\b(int|float|bool|str)\\b"
+          "match": "\\b(int|float|bool|str|void)\\b"
         }
       ]
     },
@@ -199,7 +191,7 @@
       "patterns": [
         {
           "name": "keyword.operator.vamp",
-          "match": "\\+=|-=|\\*=|/=|[+*/=<>!-]"
+          "match": "==|!=|<=|>=|\\+=|-=|\\*=|/=|[+*/=<>!-]"
         }
       ]
     },
@@ -227,13 +219,14 @@
         }
       ]
     },
-    "comments": {
-      "patterns": [
-        {
-          "name": "comment.line.double-slash.vamp",
-          "match": "//.*$"
-        }
-      ]
+    "line-comments": {
+      "name": "comment.line.double-slash.vamp",
+      "match": "//.*$"
+    },
+    "block-comments": {
+      "name": "comment.block.vamp",
+      "begin": "/\\*",
+      "end": "\\*/"
     }
   }
 }

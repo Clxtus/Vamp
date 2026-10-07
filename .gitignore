@@ -1,2 +1,4 @@
 Compiler/test.vp
 Compiler/test.exe
+Compiler/__pycache__/
+Compiler/build/

@@ -1,3 +1,8 @@
+// Vamp language and compiler feature showcase.
+/*
+Both line and block comments are supported.
+Comment contents are ignored by the compiler.
+*/
 import os
 
 func add_numbers(left : int, right : int) : (
@@ -152,7 +157,7 @@ println("=== OS library ===")
 println("Current directory exists: " + str(os.Directory_Exists(".")))
 val demo_window_title : str = "Vamp API Showcase"
 println("Created native window: " + str(os.Make_Window(demo_window_title, (
-    icon = "../vamp-icon.ico",
+    icon = "../Icons/vamp-icon.ico",
     size = (640, 480),
     resizable = true,
     type = "Windowed"
@@ -189,3 +194,6 @@ samples[1] = 20
 samples[2] = samples[0] + samples[1]
 println("Allocated values: " + str(samples[0]) + ", " + str(samples[1]) + ", " + str(samples[2]))
 free(samples)
+/*
+Block comment example.
+*/

@@ -37,6 +37,18 @@ def tokenize(source):
     tokens = []
     pos = 0
     while pos < len(source):
+        if source.startswith("//", pos):
+            newline = source.find("\n", pos + 2)
+            pos = len(source) if newline == -1 else newline + 1
+            continue
+
+        if source.startswith("/*", pos):
+            comment_end = source.find("*/", pos + 2)
+            if comment_end == -1:
+                raise SyntaxError(f"Unterminated block comment at index {pos}")
+            pos = comment_end + 2
+            continue
+
         match = None
         for kind, regex_pattern in TOKEN_PATTERNS:
             pat = re.compile(regex_pattern)

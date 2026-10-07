@@ -1,5 +1,5 @@
 @echo off
-set "ICON_PATH=%~dp0vamp-icon.ico"
+set "ICON_PATH=%~dp0Icons\Vamp.ico"
 
 echo Registering Vamp (.vp) file association and icon...
 

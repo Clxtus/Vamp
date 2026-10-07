@@ -3,6 +3,7 @@
     "lineComment": "//",
     "blockComment": ["/*", "*/"]
   },
+  "wordPattern": "(-?\\d*\\.\\d\\w*)|([\\w]+)",
   "brackets": [
     ["{", "}"],
     ["[", "]"],
@@ -12,12 +13,18 @@
     { "open": "{", "close": "}" },
     { "open": "[", "close": "]" },
     { "open": "(", "close": ")" },
-    { "open": "\"", "close": "\"" }
+    { "open": "\"", "close": "\"" },
+    { "open": "/*", "close": "*/", "notIn": ["string"] }
   ],
   "surroundingPairs": [
     ["{", "}"],
     ["[", "]"],
     ["(", ")"],
-    ["\"", "\""]
-  ]
+    ["\"", "\""],
+    ["/*", "*/"]
+  ],
+  "indentationRules": {
+    "increaseIndentPattern": "^.*\\(\\s*(?::\\s*)?$",
+    "decreaseIndentPattern": "^\\s*\\)"
+  }
 }

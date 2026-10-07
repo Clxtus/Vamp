@@ -1,9 +1,11 @@
 {
   "name": "vamp-lang",
-  "displayName": "Vamp Language",
-  "version": "1.0.1",
+  "publisher": "Clxtus",
+  "displayName": "Vamp Language Support",
+  "description": "Language support for the Vamp programming language.",
+  "version": "1.0.5",
   "engines": {
-    "vscode": "^1.70.0"
+    "vscode": "^1.80.0"
   },
   "categories": [
     "Programming Languages"
@@ -13,13 +15,18 @@
       {
         "id": "vamp",
         "aliases": ["Vamp", "vamp"],
-        "extensions": [".vp"]
+        "extensions": [".vp"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/Vamp.svg",
+          "dark": "./icons/Vamp.svg"
+        }
       }
     ],
     "grammars": [
       {
         "language": "vamp",
-        "scopeName": "source.vp",
+        "scopeName": "source.vamp",
         "path": "./syntaxes/vp.tmLanguage.json"
       }
     ]
