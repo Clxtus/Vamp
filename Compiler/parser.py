@@ -48,6 +48,11 @@ class WindowSizeNode(ASTNode):
         self.width = width
         self.height = height
 
+class WindowPointNode(ASTNode):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
 class WindowConfigNode(ASTNode):
     def __init__(self, properties):
         self.properties = properties
@@ -551,22 +556,34 @@ class Parser:
             return CastNode(tgt_ty, expr)
         elif current_token.kind == "LPAREN":
             self.consume("LPAREN")
+
+            # Check if this parenthesized block is a WindowConfigNode (e.g. size = (260, 36))
             if (
                 self.peek()
-                and (
-                    self.peek().kind == "RPAREN"
-                    or (
-                        self.peek().kind == "IDENTIFIER"
-                        and self.position + 1 < len(self.tokens)
-                        and self.tokens[self.position + 1].kind == "OPERATOR"
-                        and self.tokens[self.position + 1].text == "="
-                    )
-                )
+                and self.peek().kind == "IDENTIFIER"
+                and self.position + 1 < len(self.tokens)
+                and self.tokens[self.position + 1].kind == "OPERATOR"
+                and self.tokens[self.position + 1].text == "="
             ):
                 return self.parse_window_configuration("RPAREN")
-            expr = self.parse_expression()
+
+            first_expr = self.parse_expression()
+
+            # Handle tuples like (260, 36)
+            if self.peek() and self.peek().kind == "COMMA":
+                elems = [first_expr]
+                while self.peek() and self.peek().kind == "COMMA":
+                    self.consume("COMMA")
+                    elems.append(self.parse_expression())
+                self.consume("RPAREN")
+
+                if len(elems) == 2:
+                    return WindowSizeNode(elems[0], elems[1])
+                return TupleNode(elems)
+
+            # Single expression inside parentheses
             self.consume("RPAREN")
-            return expr
+            return first_expr
         elif current_token.kind == "INT_LITERAL":
             return LiteralNode("int", int(self.consume().text))
         elif current_token.kind == "FLOAT_LITERAL":
@@ -579,34 +596,20 @@ class Parser:
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "LPAREN":
                 function_name = self.consume("IDENTIFIER").text
                 self.consume("LPAREN")
-                if function_name == "malloc":
-                    elem_ty = self.consume("TYPE").text
-                    self.consume("COMMA")
-                    cnt = self.parse_expression()
-                    self.consume("RPAREN")
-                    return MallocNode(elem_ty, cnt)
-
-                args = []
-                if self.peek() and self.peek().kind != "RPAREN":
-                    args.append(self.parse_expression())
-                    while self.peek() and self.peek().kind == "COMMA":
-                        self.consume("COMMA")
-                        args.append(self.parse_expression())
+                args = self.parse_call_arguments()  # Use the new function
                 self.consume("RPAREN")
                 return FunctionCallNode(function_name, args)
 
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "DOT":
-                receiver_name = self.consume("IDENTIFIER").text
+                library_name = self.consume("IDENTIFIER").text
                 self.consume("DOT")
-                member_name = self.consume("IDENTIFIER").text
+                meth_name = self.consume("IDENTIFIER").text
                 if self.peek() and self.peek().kind == "LPAREN":
                     self.consume("LPAREN")
-                    args = self.parse_call_arguments()
+                    args = self.parse_call_arguments()  # Use the new function
                     self.consume("RPAREN")
-                    if receiver_name in ("os", "Directory"):
-                        return LibraryCallNode(receiver_name, member_name, args)
-                    return MethodCallNode(VariableAccessNode(receiver_name), member_name, args)
-                return DictionaryAccessNode(VariableAccessNode(receiver_name), member_name)
+                    return LibraryCallNode(library_name, meth_name, args)
+                return DictionaryAccessNode(VariableAccessNode(library_name), meth_name)
 
             array = VariableAccessNode(self.consume("IDENTIFIER").text)
             if self.peek() and self.peek().kind == "LBRACKET":
@@ -637,20 +640,24 @@ class Parser:
         while self.peek() and self.peek().kind != closing_token:
             property_name = self.consume("IDENTIFIER").text
             if property_name in properties:
-                raise SyntaxError(f"Duplicate window property '{property_name}'")
+                raise SyntaxError(f"Duplicate configuration property '{property_name}'")
             self.consume("OPERATOR", "=")
-            if property_name == "size":
+            if property_name in ("size", "position"):
                 self.consume("LPAREN")
-                width = self.parse_expression()
+                first = self.parse_expression()
                 self.consume("COMMA")
-                height = self.parse_expression()
+                second = self.parse_expression()
                 self.consume("RPAREN")
-                properties[property_name] = WindowSizeNode(width, height)
+                properties[property_name] = (
+                    WindowSizeNode(first, second)
+                    if property_name == "size"
+                    else WindowPointNode(first, second)
+                )
             else:
                 properties[property_name] = self.parse_expression()
             if self.peek() and self.peek().kind == "COMMA":
                 self.consume("COMMA")
             elif self.peek() and self.peek().kind != closing_token:
-                raise SyntaxError("Window properties must be separated by commas")
+                raise SyntaxError("Configuration properties must be separated by commas")
         self.consume(closing_token)
         return WindowConfigNode(properties)

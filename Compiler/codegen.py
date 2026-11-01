@@ -1,5 +1,5 @@
 from llvmlite import ir
-from parser import ArrayAccessNode, ArrayAssignmentNode, ArrayLiteralNode, AssignmentNode, BinaryOpNode, ClassDeclarationNode, ClassInstanceDeclarationNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, MallocNode, MethodCallNode, VariableAccessNode, VariableDeclarationNode, WhileLoopNode, WindowConfigNode, WindowSizeNode
+from parser import ArrayAccessNode, ArrayAssignmentNode, ArrayLiteralNode, AssignmentNode, BinaryOpNode, ClassDeclarationNode, ClassInstanceDeclarationNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, MallocNode, MethodCallNode, VariableAccessNode, VariableDeclarationNode, WhileLoopNode, WindowConfigNode, WindowPointNode, WindowSizeNode
 
 class ArrayLiteralValue:
     def __init__(self, elements, element_type):
@@ -256,16 +256,175 @@ class LLVMCodeGenerator:
             ir.FunctionType(self.int32_type, [self.char_pointer_type]),
             name="DestroyIcon",
         )
+        self.create_solid_brush_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.int32_type]),
+            name="CreateSolidBrush",
+        )
+        self.create_compatible_dc_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.char_pointer_type]),
+            name="CreateCompatibleDC",
+        )
+        self.create_compatible_bitmap_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.char_pointer_type,
+                [self.char_pointer_type, self.int32_type, self.int32_type],
+            ),
+            name="CreateCompatibleBitmap",
+        )
+        self.select_object_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.char_pointer_type,
+                [self.char_pointer_type, self.char_pointer_type],
+            ),
+            name="SelectObject",
+        )
+        self.set_pixel_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [
+                    self.char_pointer_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                ],
+            ),
+            name="SetPixelV",
+        )
+        self.get_pixel_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [self.char_pointer_type, self.int32_type, self.int32_type],
+            ),
+            name="GetPixel",
+        )
+        self.alpha_blend_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [
+                    self.char_pointer_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.char_pointer_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                ],
+            ),
+            name="AlphaBlend",
+        )
+        self.get_client_rect_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [self.char_pointer_type, self.char_pointer_type],
+            ),
+            name="GetClientRect",
+        )
+        self.delete_object_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type]),
+            name="DeleteObject",
+        )
+        self.delete_dc_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type]),
+            name="DeleteDC",
+        )
+        self.get_stock_object_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.int32_type]),
+            name="GetStockObject",
+        )
+        self.set_text_color_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type, self.int32_type]),
+            name="SetTextColor",
+        )
+        self.set_background_color_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type, self.int32_type]),
+            name="SetBkColor",
+        )
+        self.set_background_mode_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type, self.int32_type]),
+            name="SetBkMode",
+        )
+        self.get_property_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.char_pointer_type, self.char_pointer_type]),
+            name="GetPropA",
+        )
+        self.set_property_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type, self.char_pointer_type, self.char_pointer_type]),
+            name="SetPropA",
+        )
+        self.create_font_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.char_pointer_type,
+                [
+                    self.int32_type, self.int32_type, self.int32_type, self.int32_type,
+                    self.int32_type, self.int32_type, self.int32_type, self.int32_type,
+                    self.int32_type, self.int32_type, self.int32_type, self.int32_type,
+                    self.int32_type, self.char_pointer_type,
+                ],
+            ),
+            name="CreateFontA",
+        )
+        self.load_image_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.char_pointer_type,
+                [
+                    self.char_pointer_type, self.char_pointer_type, self.int32_type,
+                    self.int32_type, self.int32_type, self.int32_type,
+                ],
+            ),
+            name="LoadImageA",
+        )
         self.active_windows_global = None
+        self.interface_clicked_global = None
+        self.interface_ids = {}
+        self.interface_id_count = 0
+        self.interface_message_pump_function = None
         self.compare_case_insensitive_function = ir.Function(
             self.module,
             ir.FunctionType(self.int32_type, [self.char_pointer_type, self.char_pointer_type]),
             name="lstrcmpiA",
         )
+        self.get_window_thread_process_id_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [self.char_pointer_type, self.int32_type.as_pointer()],
+            ),
+            name="GetWindowThreadProcessId",
+        )
+        self.get_current_process_id_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, []),
+            name="GetCurrentProcessId",
+        )
         self.process_operation_function = None
         self.window_runtime_functions = None
         self.window_operation_function = None
         self.window_icon_function = None
+        self.interface_creation_function = None
+        self.interface_request_type = None
+        self.interface_parent_function = None
 
         self.register_window_class_function = ir.Function(
             self.module,
@@ -293,6 +452,52 @@ class LLVMCodeGenerator:
             ),
             name="CreateWindowExA",
         )
+        self.destroy_window_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type]),
+            name="DestroyWindow",
+        )
+        self.set_last_error_function = ir.Function(
+            self.module,
+            ir.FunctionType(ir.VoidType(), [self.int32_type]),
+            name="SetLastError",
+        )
+        self.get_window_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.char_pointer_type, self.int32_type]),
+            name="GetWindow",
+        )
+        self.set_window_pos_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [
+                    self.char_pointer_type,
+                    self.char_pointer_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                ],
+            ),
+            name="SetWindowPos",
+        )
+        self.find_window_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.char_pointer_type, self.char_pointer_type]),
+            name="FindWindowA",
+        )
+        self.get_dialog_item_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.char_pointer_type, self.int32_type]),
+            name="GetDlgItem",
+        )
+        self.get_window_text_length_function = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [self.char_pointer_type]),
+            name="GetWindowTextLengthA",
+        )
         self.show_window_function = ir.Function(
             self.module,
             ir.FunctionType(self.int32_type, [self.char_pointer_type, self.int32_type]),
@@ -303,6 +508,19 @@ class LLVMCodeGenerator:
             ir.FunctionType(self.int32_type, [self.char_pointer_type]),
             name="UpdateWindow",
         )
+        self.redraw_window_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [
+                    self.char_pointer_type,
+                    self.char_pointer_type,
+                    self.char_pointer_type,
+                    self.int32_type,
+                ],
+            ),
+            name="RedrawWindow",
+        )
         self.get_message_function = ir.Function(
             self.module,
             ir.FunctionType(
@@ -310,6 +528,20 @@ class LLVMCodeGenerator:
                 [self.char_pointer_type, self.char_pointer_type, self.int32_type, self.int32_type],
             ),
             name="GetMessageA",
+        )
+        self.peek_message_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [
+                    self.char_pointer_type,
+                    self.char_pointer_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                ],
+            ),
+            name="PeekMessageA",
         )
         self.translate_message_function = ir.Function(
             self.module,
@@ -446,6 +678,17 @@ class LLVMCodeGenerator:
         for stmt in program:
             self.visit(stmt)
 
+        undeclared_interfaces = [
+            key
+            for key, info in self.interface_ids.items()
+            if not info["declared"]
+        ]
+        if undeclared_interfaces:
+            window_title, interface_name = undeclared_interfaces[0]
+            raise NameError(
+                f"Interface '{interface_name}' for window '{window_title}' is not declared"
+            )
+
         if self.active_windows_global is not None:
             check_block = main_function.append_basic_block(name="check_open_windows")
             wait_block = main_function.append_basic_block(name="wait_for_windows")
@@ -466,6 +709,7 @@ class LLVMCodeGenerator:
             )
             self.builder.cbranch(windows_remain, wait_block, finish_block)
             self.builder.position_at_end(wait_block)
+            self.emit_interface_message_pump()
             self.builder.call(self.sleep_function, [ir.Constant(self.int32_type, 100)])
             self.builder.branch(check_block)
             self.builder.position_at_end(finish_block)
@@ -870,11 +1114,74 @@ class LLVMCodeGenerator:
         self.window_icon_function = fn
         return fn
 
+    def emit_interface_icon_background_brush_function(self):
+        fn = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.char_pointer_type,
+                [self.char_pointer_type, self.char_pointer_type, self.int32_type, self.int32_type],
+            ),
+            name="vamp_update_icon_background_brush",
+        )
+        fn.linkage = "internal"
+        entry = fn.append_basic_block(name="entry")
+        delete_previous = fn.append_basic_block(name="delete_previous_icon_brush")
+        create_brush = fn.append_basic_block(name="create_icon_mask_brush")
+        builder = ir.IRBuilder(entry)
+        control, device_context, x_position, y_position = fn.args
+        property_name = self.constant_string_pointer("vamp.icon.background.brush")
+        previous_brush = builder.call(
+            self.get_property_function,
+            [control, property_name],
+        )
+        has_previous_brush = builder.icmp_unsigned(
+            "!=",
+            previous_brush,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        builder.cbranch(has_previous_brush, delete_previous, create_brush)
+
+        builder.position_at_end(delete_previous)
+        builder.call(self.delete_object_function, [previous_brush])
+        builder.branch(create_brush)
+
+        builder.position_at_end(create_brush)
+        background_color = builder.call(
+            self.get_pixel_function,
+            [device_context, x_position, y_position],
+        )
+        brush = builder.call(
+            self.create_solid_brush_function,
+            [background_color],
+        )
+        builder.call(
+            self.set_property_function,
+            [control, property_name, brush],
+        )
+        builder.ret(brush)
+        return fn
+
     def get_window_runtime_functions(self):
         if self.window_runtime_functions is not None:
             return self.window_runtime_functions
 
         pointer_type = self.char_pointer_type
+        interface_creation_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                pointer_type,
+                [pointer_type, self.get_interface_request_type().as_pointer()],
+            ),
+            name="vamp_create_interface_control",
+        )
+        interface_creation_function.linkage = "internal"
+        interface_creation_function.args[0].name = "parent_window"
+        interface_creation_function.args[1].name = "request"
+        self.interface_creation_function = interface_creation_function
+        icon_background_brush_function = (
+            self.emit_interface_icon_background_brush_function()
+        )
+
         window_proc_type = ir.FunctionType(
             self.int64_type,
             [pointer_type, self.int32_type, self.int64_type, self.int64_type],
@@ -890,8 +1197,24 @@ class LLVMCodeGenerator:
         window_proc.args[2].name = "wparam"
         window_proc.args[3].name = "lparam"
 
+        self.interface_clicked_global = ir.GlobalVariable(
+            self.module,
+            ir.ArrayType(self.int32_type, 0x10000),
+            name="vamp_interface_click_flags",
+        )
+        self.interface_clicked_global.initializer = ir.Constant(
+            self.interface_clicked_global.type.pointee,
+            None,
+        )
+
         entry = window_proc.append_basic_block(name="entry")
         destroy_block = window_proc.append_basic_block(name="destroy")
+        interface_check_block = window_proc.append_basic_block(name="interface_check")
+        interface_create_block = window_proc.append_basic_block(name="interface_create")
+        color_check_block = window_proc.append_basic_block(name="color_check")
+        color_block = window_proc.append_basic_block(name="control_color")
+        command_check_block = window_proc.append_basic_block(name="command_check")
+        command_click_block = window_proc.append_basic_block(name="command_click")
         default_block = window_proc.append_basic_block(name="default")
         proc_builder = ir.IRBuilder(entry)
         is_destroy = proc_builder.icmp_signed(
@@ -899,19 +1222,499 @@ class LLVMCodeGenerator:
             window_proc.args[1],
             ir.Constant(self.int32_type, 2),
         )
-        proc_builder.cbranch(is_destroy, destroy_block, default_block)
+        proc_builder.cbranch(is_destroy, destroy_block, interface_check_block)
         proc_builder.position_at_end(destroy_block)
         proc_builder.call(
             self.post_quit_message_function,
             [ir.Constant(self.int32_type, 0)],
         )
         proc_builder.ret(ir.Constant(self.int64_type, 0))
+
+        proc_builder.position_at_end(interface_check_block)
+        is_interface_create = proc_builder.icmp_signed(
+            "==",
+            window_proc.args[1],
+            ir.Constant(self.int32_type, 0x8001),
+        )
+        proc_builder.cbranch(
+            is_interface_create,
+            interface_create_block,
+            color_check_block,
+        )
+
+        proc_builder.position_at_end(interface_create_block)
+        interface_request = proc_builder.inttoptr(
+            window_proc.args[3],
+            self.get_interface_request_type().as_pointer(),
+        )
+        created_control = proc_builder.call(
+            interface_creation_function,
+            [window_proc.args[0], interface_request],
+        )
+        proc_builder.ret(proc_builder.ptrtoint(created_control, self.int64_type))
+
+        proc_builder.position_at_end(color_check_block)
+        msg = window_proc.args[1]
+        is_control_color = None
+        for color_message in (0x0132, 0x0133, 0x0135, 0x0138):
+            matches = proc_builder.icmp_signed(
+                "==",
+                msg,
+                ir.Constant(self.int32_type, color_message),
+            )
+            is_control_color = matches if is_control_color is None else proc_builder.or_(
+                is_control_color,
+                matches,
+            )
+        proc_builder.cbranch(is_control_color, color_block, command_check_block)
+
+        proc_builder.position_at_end(color_block)
+        control_window = proc_builder.inttoptr(window_proc.args[3], self.char_pointer_type)
+        device_context = proc_builder.inttoptr(window_proc.args[2], self.char_pointer_type)
+        text_color = proc_builder.call(
+            self.get_property_function,
+            [control_window, self.constant_string_pointer("vamp.text.color")],
+        )
+        background_brush = proc_builder.call(
+            self.get_property_function,
+            [control_window, self.constant_string_pointer("vamp.background.brush")],
+        )
+        background_opacity = proc_builder.call(
+            self.get_property_function,
+            [control_window, self.constant_string_pointer("vamp.background.opacity")],
+        )
+        background_color = proc_builder.call(
+            self.get_property_function,
+            [control_window, self.constant_string_pointer("vamp.background.color")],
+        )
+        background_transparent = proc_builder.call(
+            self.get_property_function,
+            [control_window, self.constant_string_pointer("vamp.background.transparent")],
+        )
+        is_icon_control = proc_builder.call(
+            self.get_property_function,
+            [control_window, self.constant_string_pointer("vamp.interface.icon")],
+        )
+        has_color_properties = proc_builder.or_(
+            proc_builder.icmp_unsigned(
+                "!=",
+                text_color,
+                ir.Constant(self.char_pointer_type, None),
+            ),
+            proc_builder.or_(
+                proc_builder.icmp_unsigned(
+                    "!=",
+                    background_brush,
+                    ir.Constant(self.char_pointer_type, None),
+                ),
+                proc_builder.icmp_unsigned(
+                    "!=",
+                    background_transparent,
+                    ir.Constant(self.char_pointer_type, None),
+                ),
+            ),
+        )
+        color_ready_block = window_proc.append_basic_block(name="control_color_ready")
+        proc_builder.cbranch(has_color_properties, color_ready_block, default_block)
+
+        proc_builder.position_at_end(color_ready_block)
+        has_text_color = proc_builder.icmp_unsigned(
+            "!=",
+            text_color,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        set_text_color_block = window_proc.append_basic_block(name="set_control_text_color")
+        set_background_block = window_proc.append_basic_block(name="set_control_background")
+        proc_builder.cbranch(has_text_color, set_text_color_block, set_background_block)
+
+        proc_builder.position_at_end(set_text_color_block)
+        proc_builder.call(
+            self.set_text_color_function,
+            [
+                device_context,
+                proc_builder.sub(
+                    proc_builder.ptrtoint(text_color, self.int32_type),
+                    ir.Constant(self.int32_type, 1),
+                ),
+            ],
+        )
+        proc_builder.branch(set_background_block)
+
+        proc_builder.position_at_end(set_background_block)
+        is_transparent_background = proc_builder.icmp_unsigned(
+            "!=",
+            background_transparent,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        transparent_background_block = window_proc.append_basic_block(name="transparent_control_background")
+        transparent_icon_background_block = window_proc.append_basic_block(
+            name="transparent_icon_background"
+        )
+        opaque_background_block = window_proc.append_basic_block(name="opaque_control_background")
+        proc_builder.cbranch(
+            is_transparent_background,
+            transparent_background_block,
+            opaque_background_block,
+        )
+
+        proc_builder.position_at_end(transparent_background_block)
+        transparent_icon = proc_builder.icmp_unsigned(
+            "!=",
+            is_icon_control,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        transparent_icon_block = window_proc.append_basic_block(
+            name="transparent_icon_mask_background"
+        )
+        proc_builder.cbranch(
+            transparent_icon,
+            transparent_icon_background_block,
+            transparent_icon_block,
+        )
+
+        proc_builder.position_at_end(transparent_icon_block)
+        proc_builder.call(
+            self.set_background_mode_function,
+            [device_context, ir.Constant(self.int32_type, 1)],
+        )
+        null_brush = proc_builder.call(
+            self.get_stock_object_function,
+            [ir.Constant(self.int32_type, 5)],
+        )
+        proc_builder.ret(proc_builder.ptrtoint(null_brush, self.int64_type))
+
+        proc_builder.position_at_end(transparent_icon_background_block)
+        icon_transparent_color = proc_builder.call(
+            self.get_pixel_function,
+            [
+                device_context,
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+            ],
+        )
+        proc_builder.call(
+            self.set_background_color_function,
+            [device_context, icon_transparent_color],
+        )
+        proc_builder.call(
+            self.set_background_mode_function,
+            [device_context, ir.Constant(self.int32_type, 2)],
+        )
+        icon_transparent_brush = proc_builder.call(
+            self.create_solid_brush_function,
+            [icon_transparent_color],
+        )
+        proc_builder.ret(
+            proc_builder.ptrtoint(icon_transparent_brush, self.int64_type)
+        )
+
+        proc_builder.position_at_end(opaque_background_block)
+        has_background_brush = proc_builder.icmp_unsigned(
+            "!=",
+            background_brush,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        set_colored_background_block = window_proc.append_basic_block(
+            name="set_colored_control_background"
+        )
+        default_background_block = window_proc.append_basic_block(name="default_control_background")
+        proc_builder.cbranch(
+            has_background_brush,
+            set_colored_background_block,
+            default_background_block,
+        )
+        proc_builder.position_at_end(set_colored_background_block)
+        has_background_opacity = proc_builder.icmp_unsigned(
+            "!=",
+            background_opacity,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        alpha_background_block = window_proc.append_basic_block(
+            name="alpha_control_background"
+        )
+        set_opaque_background_block = window_proc.append_basic_block(
+            name="set_opaque_control_background"
+        )
+        proc_builder.cbranch(
+            has_background_opacity,
+            alpha_background_block,
+            set_opaque_background_block,
+        )
+
+        proc_builder.position_at_end(alpha_background_block)
+        client_rect_type = ir.LiteralStructType([self.int32_type] * 4)
+        client_rect = proc_builder.alloca(client_rect_type, name="interface_client_rect")
+        proc_builder.call(
+            self.get_client_rect_function,
+            [
+                control_window,
+                proc_builder.bitcast(client_rect, self.char_pointer_type),
+            ],
+        )
+        left = proc_builder.load(
+            proc_builder.gep(
+                client_rect,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 0)],
+            )
+        )
+        top = proc_builder.load(
+            proc_builder.gep(
+                client_rect,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 1)],
+            )
+        )
+        right = proc_builder.load(
+            proc_builder.gep(
+                client_rect,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 2)],
+            )
+        )
+        bottom = proc_builder.load(
+            proc_builder.gep(
+                client_rect,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 3)],
+            )
+        )
+        memory_dc = proc_builder.call(
+            self.create_compatible_dc_function,
+            [device_context],
+            name="interface_alpha_memory_dc",
+        )
+        memory_dc_created = proc_builder.icmp_unsigned(
+            "!=",
+            memory_dc,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        create_alpha_bitmap_block = window_proc.append_basic_block(
+            name="create_interface_alpha_bitmap"
+        )
+        alpha_fallback_block = window_proc.append_basic_block(
+            name="interface_alpha_fallback"
+        )
+        proc_builder.cbranch(
+            memory_dc_created,
+            create_alpha_bitmap_block,
+            alpha_fallback_block,
+        )
+
+        proc_builder.position_at_end(create_alpha_bitmap_block)
+        memory_bitmap = proc_builder.call(
+            self.create_compatible_bitmap_function,
+            [
+                device_context,
+                ir.Constant(self.int32_type, 1),
+                ir.Constant(self.int32_type, 1),
+            ],
+            name="interface_alpha_bitmap",
+        )
+        memory_bitmap_created = proc_builder.icmp_unsigned(
+            "!=",
+            memory_bitmap,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        blend_alpha_block = window_proc.append_basic_block(
+            name="blend_interface_alpha_background"
+        )
+        delete_failed_dc_block = window_proc.append_basic_block(
+            name="delete_interface_alpha_dc"
+        )
+        proc_builder.cbranch(
+            memory_bitmap_created,
+            blend_alpha_block,
+            delete_failed_dc_block,
+        )
+
+        proc_builder.position_at_end(blend_alpha_block)
+        previous_bitmap = proc_builder.call(
+            self.select_object_function,
+            [memory_dc, memory_bitmap],
+        )
+        proc_builder.call(
+            self.set_pixel_function,
+            [
+                memory_dc,
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                proc_builder.sub(
+                    proc_builder.ptrtoint(background_color, self.int32_type),
+                    ir.Constant(self.int32_type, 1),
+                ),
+            ],
+        )
+        alpha_value = proc_builder.sub(
+            proc_builder.ptrtoint(background_opacity, self.int32_type),
+            ir.Constant(self.int32_type, 1),
+        )
+        alpha_blend_result = proc_builder.call(
+            self.alpha_blend_function,
+            [
+                device_context,
+                left,
+                top,
+                proc_builder.sub(right, left),
+                proc_builder.sub(bottom, top),
+                memory_dc,
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 1),
+                ir.Constant(self.int32_type, 1),
+                proc_builder.shl(alpha_value, ir.Constant(self.int32_type, 16)),
+            ],
+        )
+        proc_builder.call(
+            self.select_object_function,
+            [memory_dc, previous_bitmap],
+        )
+        proc_builder.call(self.delete_object_function, [memory_bitmap])
+        proc_builder.call(self.delete_dc_function, [memory_dc])
+        blend_succeeded = proc_builder.icmp_signed(
+            "!=",
+            alpha_blend_result,
+            ir.Constant(self.int32_type, 0),
+        )
+        alpha_painted_block = window_proc.append_basic_block(
+            name="interface_alpha_painted"
+        )
+        alpha_icon_painted_block = window_proc.append_basic_block(
+            name="interface_alpha_icon_painted"
+        )
+        proc_builder.cbranch(
+            blend_succeeded,
+            alpha_painted_block,
+            alpha_fallback_block,
+        )
+
+        proc_builder.position_at_end(alpha_painted_block)
+        alpha_icon = proc_builder.icmp_unsigned(
+            "!=",
+            is_icon_control,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        alpha_icon_block = window_proc.append_basic_block(
+            name="alpha_icon_mask_background"
+        )
+        proc_builder.cbranch(alpha_icon, alpha_icon_painted_block, alpha_icon_block)
+
+        proc_builder.position_at_end(alpha_icon_block)
+        proc_builder.call(
+            self.set_background_mode_function,
+            [device_context, ir.Constant(self.int32_type, 1)],
+        )
+        alpha_null_brush = proc_builder.call(
+            self.get_stock_object_function,
+            [ir.Constant(self.int32_type, 5)],
+        )
+        proc_builder.ret(proc_builder.ptrtoint(alpha_null_brush, self.int64_type))
+
+        proc_builder.position_at_end(alpha_icon_painted_block)
+        icon_alpha_brush = proc_builder.call(
+            icon_background_brush_function,
+            [control_window, device_context, left, top],
+        )
+        icon_alpha_color = proc_builder.call(
+            self.get_pixel_function,
+            [device_context, left, top],
+        )
+        proc_builder.call(
+            self.set_background_color_function,
+            [device_context, icon_alpha_color],
+        )
+        proc_builder.call(
+            self.set_background_mode_function,
+            [device_context, ir.Constant(self.int32_type, 2)],
+        )
+        proc_builder.ret(proc_builder.ptrtoint(icon_alpha_brush, self.int64_type))
+
+        proc_builder.position_at_end(delete_failed_dc_block)
+        proc_builder.call(self.delete_dc_function, [memory_dc])
+        proc_builder.branch(alpha_fallback_block)
+
+        proc_builder.position_at_end(alpha_fallback_block)
+        proc_builder.call(
+            self.set_background_mode_function,
+            [device_context, ir.Constant(self.int32_type, 2)],
+        )
+        proc_builder.ret(proc_builder.ptrtoint(background_brush, self.int64_type))
+
+        proc_builder.position_at_end(set_opaque_background_block)
+        proc_builder.call(
+            self.set_background_color_function,
+            [
+                device_context,
+                proc_builder.sub(
+                    proc_builder.ptrtoint(background_color, self.int32_type),
+                    ir.Constant(self.int32_type, 1),
+                ),
+            ],
+        )
+        proc_builder.call(
+            self.set_background_mode_function,
+            [device_context, ir.Constant(self.int32_type, 2)],
+        )
+        proc_builder.ret(proc_builder.ptrtoint(background_brush, self.int64_type))
+        proc_builder.position_at_end(default_background_block)
+        proc_builder.call(
+            self.set_background_mode_function,
+            [device_context, ir.Constant(self.int32_type, 1)],
+        )
+        default_brush = proc_builder.call(
+            self.get_stock_object_function,
+            [ir.Constant(self.int32_type, 5)],
+        )
+        proc_builder.ret(proc_builder.ptrtoint(default_brush, self.int64_type))
+
+        proc_builder.position_at_end(command_check_block)
+        is_command = proc_builder.icmp_signed(
+            "==",
+            window_proc.args[1],
+            ir.Constant(self.int32_type, 0x0111),
+        )
+        proc_builder.cbranch(is_command, command_click_block, default_block)
+
+        proc_builder.position_at_end(command_click_block)
+        has_control_source = proc_builder.icmp_unsigned(
+            "!=",
+            window_proc.args[3],
+            ir.Constant(self.int64_type, 0),
+        )
+        notification_code = proc_builder.lshr(window_proc.args[2], ir.Constant(self.int64_type, 16))
+        is_button_click = proc_builder.icmp_unsigned(
+            "==",
+            proc_builder.and_(notification_code, ir.Constant(self.int64_type, 0xffff)),
+            ir.Constant(self.int64_type, 0),
+        )
+        is_control_click = proc_builder.and_(has_control_source, is_button_click)
+        click_record_block = window_proc.append_basic_block(name="record_interface_click")
+        proc_builder.cbranch(is_control_click, click_record_block, default_block)
+
+        proc_builder.position_at_end(click_record_block)
+        control_id = proc_builder.trunc(
+            proc_builder.and_(window_proc.args[2], ir.Constant(self.int64_type, 0xffff)),
+            self.int32_type,
+        )
+        click_flag_pointer = proc_builder.gep(
+            self.interface_clicked_global,
+            [
+                ir.Constant(self.int32_type, 0),
+                control_id,
+            ],
+        )
+        proc_builder.atomic_rmw(
+            "xchg",
+            click_flag_pointer,
+            ir.Constant(self.int32_type, 1),
+            "release",
+        )
+        proc_builder.ret(ir.Constant(self.int64_type, 0))
+
         proc_builder.position_at_end(default_block)
         default_result = proc_builder.call(
             self.default_window_proc_function,
             list(window_proc.args),
         )
         proc_builder.ret(default_result)
+
+        self.emit_interface_creation_function(interface_creation_function)
 
         window_target = ir.GlobalVariable(
             self.module,
@@ -1801,6 +2604,34 @@ class LLVMCodeGenerator:
             raise NameError("Library 'os' is not imported. Add 'import os' at top of file.")
 
         if node.library_name == "os":
+            if node.method_name == "Sleep":
+                self.require_argument_count(node, 1)
+                milliseconds, milliseconds_type = self.visit(node.arguments[0])
+                if milliseconds_type != "int":
+                    raise TypeError("os.Sleep expects an integer number of milliseconds")
+                valid_block = self.builder.function.append_basic_block(name="sleep_valid")
+                invalid_block = self.builder.function.append_basic_block(name="sleep_invalid")
+                merge_block = self.builder.function.append_basic_block(name="sleep_end")
+                is_nonnegative = self.builder.icmp_signed(
+                    ">=",
+                    milliseconds,
+                    ir.Constant(self.int32_type, 0),
+                )
+                self.builder.cbranch(is_nonnegative, valid_block, invalid_block)
+
+                self.builder.position_at_end(invalid_block)
+                error_message = self.visit_LiteralNode(
+                    LiteralNode("str", "Error: os.Sleep duration cannot be negative\n")
+                )[0]
+                self.builder.call(self.printf_function, [error_message])
+                self.builder.branch(merge_block)
+
+                self.builder.position_at_end(valid_block)
+                self.emit_interface_message_pump()
+                self.builder.call(self.sleep_function, [milliseconds])
+                self.builder.branch(merge_block)
+                self.builder.position_at_end(merge_block)
+                return None, "void"
             if node.method_name == "Make_Directory":
                 path_value = self.get_directory_path_argument(node)
                 absolute_path, _ = self.emit_absolute_path(path_value)
@@ -2050,6 +2881,549 @@ class LLVMCodeGenerator:
                 succeeded.add_incoming(ir.Constant(self.bool_type, 0), error_predecessor)
                 succeeded.add_incoming(ir.Constant(self.bool_type, 1), success_predecessor)
                 return succeeded, "bool"
+            if node.method_name == "Make_Interface":
+                self.require_argument_count(node, 4)
+                type_expression, window_title_expression, name_expression, cfg = node.arguments
+                if not isinstance(type_expression, LiteralNode) or type_expression.literal_type != "str":
+                    raise TypeError("os.Make_Interface type must be a string literal")
+                interface_type = type_expression.value.lower()
+                if interface_type not in ("label", "button", "frame", "icon"):
+                    raise ValueError(
+                        "os.Make_Interface type must be 'label', 'button', 'frame', or 'icon'"
+                    )
+                key = self.get_interface_key(window_title_expression, name_expression)
+                if not isinstance(cfg, WindowConfigNode):
+                    raise TypeError("os.Make_Interface requires a parenthesized property block")
+
+                common_properties = {"size", "position", "visible"}
+                common_properties.add("layer")
+                type_properties = {
+                    "label": {
+                        "text", "text_color", "font", "text_size", "text_transparency",
+                        "background_color", "background_transparency", "editable",
+                    },
+                    "button": {
+                        "text", "icon", "text_color", "font", "text_size",
+                        "text_transparency", "background_color", "background_transparency",
+                    },
+                    "frame": {"background_color", "background_transparency"},
+                    "icon": {"icon", "background_color", "background_transparency"},
+                }
+                supported_properties = common_properties | type_properties[interface_type]
+                unknown_properties = set(cfg.properties) - supported_properties
+                if unknown_properties:
+                    unknown = sorted(unknown_properties)[0]
+                    raise SyntaxError(
+                        f"Property '{unknown}' is not supported for interface type '{interface_type}'"
+                    )
+                for required_property in ("size", "position"):
+                    if required_property not in cfg.properties:
+                        raise SyntaxError(
+                            f"os.Make_Interface requires the '{required_property}' property"
+                        )
+
+                editable_expression = cfg.properties.get("editable")
+                editable = False
+                if editable_expression is not None:
+                    if not isinstance(editable_expression, LiteralNode) or editable_expression.literal_type != "bool":
+                        raise TypeError("Interface property 'editable' must be true or false")
+                    editable = editable_expression.value
+                if interface_type != "label" and editable_expression is not None:
+                    raise SyntaxError("Interface property 'editable' is only valid for labels")
+
+                text_expression = cfg.properties.get("text")
+                icon_expression = cfg.properties.get("icon")
+                if text_expression is not None and interface_type in ("label", "button"):
+                    text_value, text_type = self.visit(text_expression)
+                    if text_type != "str":
+                        raise TypeError("Interface property 'text' must be a string")
+                else:
+                    text_value = self.visit_LiteralNode(LiteralNode("str", ""))[0]
+
+                if interface_type == "button" and text_expression is not None and icon_expression is not None:
+                    raise SyntaxError("A button can use 'text' or 'icon', not both")
+                if interface_type == "button" and text_expression is None and icon_expression is None:
+                    raise SyntaxError("A button requires either 'text' or 'icon'")
+                if interface_type == "button" and icon_expression is not None and {
+                    "text_color",
+                    "font",
+                    "text_size",
+                    "text_transparency",
+                } & set(cfg.properties):
+                    raise SyntaxError(
+                        "Text properties cannot be used on an icon-only button"
+                    )
+                if interface_type == "icon" and icon_expression is None:
+                    raise SyntaxError("Interface type 'icon' requires the 'icon' property")
+                if icon_expression is not None and interface_type not in ("button", "icon"):
+                    raise SyntaxError("Interface property 'icon' is only valid for buttons and icons")
+                if icon_expression is not None:
+                    icon_path, icon_type = self.visit(icon_expression)
+                    if icon_type != "str":
+                        raise TypeError("Interface property 'icon' must be a string path")
+
+                size_expression = cfg.properties["size"]
+                position_expression = cfg.properties["position"]
+                if not isinstance(size_expression, WindowSizeNode):
+                    raise TypeError("Interface property 'size' must be a pair of integers")
+                if not isinstance(position_expression, WindowPointNode):
+                    raise TypeError("Interface property 'position' must be a pair of integers")
+                width, width_type = self.visit(size_expression.width)
+                height, height_type = self.visit(size_expression.height)
+                x_position, x_type = self.visit(position_expression.x)
+                y_position, y_type = self.visit(position_expression.y)
+                if (width_type, height_type, x_type, y_type) != ("int", "int", "int", "int"):
+                    raise TypeError("Interface size and position values must be integers")
+
+                visible_expression = cfg.properties.get(
+                    "visible",
+                    LiteralNode("bool", True),
+                )
+                visible_value, visible_type = self.visit(visible_expression)
+                if visible_type != "bool":
+                    raise TypeError("Interface property 'visible' must be a bool")
+                layer_expression = cfg.properties.get(
+                    "layer",
+                    LiteralNode("int", 0),
+                )
+                layer_value, layer_type = self.visit(layer_expression)
+                if layer_type != "int":
+                    raise TypeError("Interface property 'layer' must be an int")
+
+                text_color_expression = cfg.properties.get("text_color")
+                text_transparency_expression = cfg.properties.get("text_transparency")
+                background_color_expression = cfg.properties.get("background_color")
+                background_transparency_expression = cfg.properties.get("background_transparency")
+                text_color = None
+                background_color = None
+                system_face = 0x00ffffff
+
+                if text_color_expression is not None or text_transparency_expression is not None:
+                    raw_text_color = (
+                        self.parse_interface_color(text_color_expression, "text_color")
+                        if text_color_expression is not None
+                        else 0
+                    )
+                    text_opacity = 1.0
+                    if text_transparency_expression is not None:
+                        if not isinstance(text_transparency_expression, LiteralNode) or text_transparency_expression.literal_type not in ("float", "int"):
+                            raise TypeError("Interface property 'text_transparency' must be a number from 0.0 to 1.0")
+                        text_opacity = float(text_transparency_expression.value)
+                        if not 0.0 <= text_opacity <= 1.0:
+                            raise ValueError("Interface property 'text_transparency' must be from 0.0 to 1.0")
+                    text_color = self.blend_color(raw_text_color, system_face, text_opacity)
+
+                background_transparency = 0.0
+                if background_transparency_expression is not None:
+                    if not isinstance(background_transparency_expression, LiteralNode) or background_transparency_expression.literal_type not in ("float", "int"):
+                        raise TypeError("Interface property 'background_transparency' must be a number from 0.0 to 1.0")
+                    background_transparency = float(background_transparency_expression.value)
+                    if not 0.0 <= background_transparency <= 1.0:
+                        raise ValueError("Interface property 'background_transparency' must be from 0.0 to 1.0")
+                background_opacity = background_transparency
+                if background_color_expression is not None:
+                    raw_background_color = self.parse_interface_color(
+                        background_color_expression,
+                        "background_color",
+                    )
+                    background_color = raw_background_color
+                elif background_transparency_expression is not None and background_opacity > 0.0:
+                    background_color = system_face
+
+                if text_color_expression is not None or text_transparency_expression is not None:
+                    effective_background = (
+                        background_color if background_color is not None else system_face
+                    )
+                    text_color = self.blend_color(
+                        raw_text_color,
+                        effective_background,
+                        text_opacity,
+                    )
+                font_expression = cfg.properties.get("font")
+                text_size_expression = cfg.properties.get("text_size")
+                font_name = font_expression.value if isinstance(font_expression, LiteralNode) and font_expression.literal_type == "str" else "Segoe UI"
+                if font_expression is not None and (not isinstance(font_expression, LiteralNode) or font_expression.literal_type != "str"):
+                    raise TypeError("Interface property 'font' must be a string literal")
+                font_size = ir.Constant(self.int32_type, 16)
+                if text_size_expression is not None:
+                    if not isinstance(text_size_expression, LiteralNode) or text_size_expression.literal_type != "int":
+                        raise TypeError("Interface property 'text_size' must be a positive integer literal")
+                    if text_size_expression.value <= 0:
+                        raise ValueError("Interface property 'text_size' must be positive")
+                    font_size = ir.Constant(self.int32_type, text_size_expression.value)
+
+                control_id = self.register_interface(
+                    key,
+                    interface_type,
+                    editable,
+                )
+                cls_name = {
+                    "label": "EDIT" if editable else "STATIC",
+                    "button": (
+                        "STATIC"
+                        if background_color_expression is not None
+                        or background_transparency_expression is not None
+                        else "BUTTON"
+                    ),
+                    "frame": "STATIC",
+                    "icon": "STATIC",
+                }[interface_type]
+                control_style = 0x44000000
+                if interface_type == "button":
+                    control_style |= 0x00010000
+                    if icon_expression is not None:
+                        control_style |= (
+                            0x00000103
+                            if background_color_expression is not None
+                            or background_transparency_expression is not None
+                            else 0x00000040
+                        )
+                    elif (
+                        background_color_expression is not None
+                        or background_transparency_expression is not None
+                    ):
+                        control_style |= 0x00000301
+                elif interface_type == "icon":
+                    control_style |= 0x00000003
+                elif editable:
+                    control_style |= 0x00010000 | 0x00000080
+                has_background_configuration = (
+                    background_color_expression is not None
+                    or background_transparency_expression is not None
+                )
+                if has_background_configuration and background_opacity == 0.0:
+                    background_mode = 1
+                elif has_background_configuration and background_opacity < 1.0:
+                    alpha = max(1, int(background_opacity * 255 + 0.5))
+                    background_mode = 3 + alpha
+                elif background_color is not None:
+                    background_mode = 2
+                else:
+                    background_mode = 0
+
+                font_enabled = font_expression is not None or text_size_expression is not None
+                font_name_value = self.visit_LiteralNode(
+                    LiteralNode("str", font_name if font_enabled else "")
+                )[0]
+                icon_path_value = (
+                    icon_path if icon_expression is not None else
+                    ir.Constant(self.char_pointer_type, None)
+                )
+                icon_kind = (
+                    1
+                    if interface_type == "button"
+                    and background_color_expression is None
+                    and background_transparency_expression is None
+                    else 2
+                ) if icon_expression is not None else 0
+                ex_style = (
+                    0
+                    if editable or background_mode == 2 or background_mode > 2
+                    else 0x00000020
+                )
+                interface_request_type = self.get_interface_request_type()
+                interface_request = self.builder.alloca(
+                    interface_request_type,
+                    name="interface_creation_request",
+                )
+                request_values = [
+                    self.visit_LiteralNode(LiteralNode("str", cls_name))[0],
+                    text_value,
+                    ir.Constant(self.int32_type, control_style),
+                    x_position,
+                    y_position,
+                    width,
+                    height,
+                    ir.Constant(self.int32_type, control_id),
+                    ir.Constant(self.int32_type, ex_style),
+                    layer_value,
+                    self.builder.zext(visible_value, self.int32_type),
+                    ir.Constant(
+                        self.int32_type,
+                        text_color + 1 if text_color is not None else 0,
+                    ),
+                    ir.Constant(self.int32_type, background_mode),
+                    ir.Constant(self.int32_type, background_color or 0),
+                    font_size if font_enabled else ir.Constant(self.int32_type, 0),
+                    font_name_value,
+                    icon_path_value,
+                    ir.Constant(self.int32_type, icon_kind),
+                    ir.Constant(self.int32_type, -1),
+                ]
+                for field_index, field_value in enumerate(request_values):
+                    field_pointer = self.builder.gep(
+                        interface_request,
+                        [
+                            ir.Constant(self.int32_type, 0),
+                            ir.Constant(self.int32_type, field_index),
+                        ],
+                    )
+                    self.builder.store(field_value, field_pointer)
+
+                null_pointer = ir.Constant(self.char_pointer_type, None)
+                window_title = self.visit_LiteralNode(
+                    LiteralNode("str", key[0])
+                )[0]
+                parent_window = self.builder.call(
+                    self.get_interface_parent_function(),
+                    [window_title],
+                    name="interface_parent_window",
+                )
+                fn = self.builder.function
+                missing_parent_block = fn.append_basic_block(
+                    name="interface_parent_missing"
+                )
+                create_control_block = fn.append_basic_block(
+                    name="interface_create_control"
+                )
+                merge_block = fn.append_basic_block(name="interface_create_end")
+                parent_found = self.builder.icmp_unsigned("!=", parent_window, null_pointer)
+                self.builder.cbranch(
+                    parent_found,
+                    create_control_block,
+                    missing_parent_block,
+                )
+
+                self.builder.position_at_end(missing_parent_block)
+                missing_parent_format = self.visit_LiteralNode(
+                    LiteralNode(
+                        "str",
+                        "Error: interface parent window '%s' was not found\n",
+                    )
+                )[0]
+                self.builder.call(
+                    self.printf_function,
+                    [missing_parent_format, window_title],
+                )
+                self.builder.branch(merge_block)
+                missing_parent_predecessor = self.builder.block
+
+                self.builder.position_at_end(create_control_block)
+                created_control = self.builder.call(
+                    self.send_message_function,
+                    [
+                        parent_window,
+                        ir.Constant(self.int32_type, 0x8001),
+                        ir.Constant(self.int64_type, 0),
+                        self.builder.ptrtoint(interface_request, self.int64_type),
+                    ],
+                    name="created_interface_control",
+                )
+                succeeded = self.builder.icmp_unsigned(
+                    "!=",
+                    created_control,
+                    ir.Constant(self.int64_type, 0),
+                    name="interface_created",
+                )
+                report_failure_block = fn.append_basic_block(
+                    name="interface_create_report_failure"
+                )
+                created_block = fn.append_basic_block(
+                    name="interface_created_successfully"
+                )
+                self.builder.cbranch(succeeded, created_block, report_failure_block)
+
+                self.builder.position_at_end(report_failure_block)
+                error_pointer = self.builder.gep(
+                    interface_request,
+                    [
+                        ir.Constant(self.int32_type, 0),
+                        ir.Constant(self.int32_type, 18),
+                    ],
+                )
+                error_code = self.builder.load(error_pointer)
+                unhandled_request_block = fn.append_basic_block(
+                    name="interface_request_unhandled"
+                )
+                win32_error_block = fn.append_basic_block(
+                    name="interface_create_windows_error"
+                )
+                has_error_code = self.builder.icmp_signed(
+                    "!=",
+                    error_code,
+                    ir.Constant(self.int32_type, -1),
+                )
+                self.builder.cbranch(
+                    has_error_code,
+                    win32_error_block,
+                    unhandled_request_block,
+                )
+
+                self.builder.position_at_end(unhandled_request_block)
+                unhandled_format = self.visit_LiteralNode(
+                    LiteralNode(
+                        "str",
+                        "Error: the window thread did not handle interface '%s' in window '%s'\n",
+                    )
+                )[0]
+                unhandled_interface_name = self.visit_LiteralNode(
+                    LiteralNode("str", key[1])
+                )[0]
+                self.builder.call(
+                    self.printf_function,
+                    [unhandled_format, unhandled_interface_name, window_title],
+                )
+                self.builder.branch(merge_block)
+                unhandled_predecessor = self.builder.block
+
+                self.builder.position_at_end(win32_error_block)
+                error_format = self.visit_LiteralNode(
+                    LiteralNode(
+                        "str",
+                        "Error: could not create interface '%s' in window '%s' (Windows error %d)\n",
+                    )
+                )[0]
+                interface_name = self.visit_LiteralNode(
+                    LiteralNode("str", key[1])
+                )[0]
+                interface_name = self.visit_LiteralNode(
+                    LiteralNode("str", key[1])
+                )[0]
+                self.builder.call(
+                    self.printf_function,
+                    [error_format, interface_name, window_title, error_code],
+                )
+                self.builder.branch(merge_block)
+                failure_predecessor = self.builder.block
+
+                self.builder.position_at_end(created_block)
+                self.builder.branch(merge_block)
+                success_predecessor = self.builder.block
+
+                self.builder.position_at_end(merge_block)
+                res = self.builder.phi(self.bool_type, name="interface_create_result")
+                res.add_incoming(
+                    ir.Constant(self.bool_type, 0),
+                    missing_parent_predecessor,
+                )
+                res.add_incoming(
+                    ir.Constant(self.bool_type, 0),
+                    unhandled_predecessor,
+                )
+                res.add_incoming(ir.Constant(self.bool_type, 0), failure_predecessor)
+                res.add_incoming(ir.Constant(self.bool_type, 1), success_predecessor)
+                return res, "bool"
+            if node.method_name == "Interface_Clicked":
+                self.require_argument_count(node, 2)
+                control_id = self.get_interface_id(
+                    node.arguments[0],
+                    node.arguments[1],
+                    "button",
+                )
+                if self.interface_clicked_global is None:
+                    self.get_window_runtime_functions()
+                self.emit_interface_message_pump()
+                click_flag_pointer = self.builder.gep(
+                    self.interface_clicked_global,
+                    [
+                        ir.Constant(self.int32_type, 0),
+                        ir.Constant(self.int32_type, control_id),
+                    ],
+                    name="interface_click_flag",
+                )
+                clicked_id = self.builder.atomic_rmw(
+                    "xchg",
+                    click_flag_pointer,
+                    ir.Constant(self.int32_type, 0),
+                    "acquire",
+                    name="interface_click_result",
+                )
+                return self.builder.icmp_signed(
+                    "!=",
+                    clicked_id,
+                    ir.Constant(self.int32_type, 0),
+                    name="interface_was_clicked",
+                ), "bool"
+            if node.method_name == "Get_Interface_Text":
+                self.require_argument_count(node, 2)
+                control_id = self.get_interface_id(
+                    node.arguments[0],
+                    node.arguments[1],
+                    "editable",
+                )
+                key = self.get_interface_key(node.arguments[0], node.arguments[1])
+                window_title = self.visit_LiteralNode(LiteralNode("str", key[0]))[0]
+                self.emit_interface_message_pump()
+                parent_window = self.builder.call(
+                    self.find_window_function,
+                    [ir.Constant(self.char_pointer_type, None), window_title],
+                    name="interface_text_parent",
+                )
+                control_window = self.builder.call(
+                    self.get_dialog_item_function,
+                    [
+                        parent_window,
+                        ir.Constant(self.int32_type, control_id),
+                    ],
+                    name="interface_text_control",
+                )
+                fn = self.builder.function
+                missing_block = fn.append_basic_block(name="interface_text_missing")
+                read_block = fn.append_basic_block(name="interface_text_read")
+                merge_block = fn.append_basic_block(name="interface_text_end")
+                control_missing = self.builder.icmp_unsigned(
+                    "==",
+                    control_window,
+                    ir.Constant(self.char_pointer_type, None),
+                )
+                self.builder.cbranch(control_missing, missing_block, read_block)
+
+                self.builder.position_at_end(missing_block)
+                error_format = self.visit_LiteralNode(
+                    LiteralNode(
+                        "str",
+                        "Error: interface '%s' was not found in window '%s'\\n",
+                    )
+                )[0]
+                name_value = self.visit_LiteralNode(LiteralNode("str", key[1]))[0]
+                self.builder.call(
+                    self.printf_function,
+                    [error_format, name_value, window_title],
+                )
+                empty_text = self.builder.call(
+                    self.malloc_function,
+                    [ir.Constant(self.int64_type, 1)],
+                    name="missing_interface_text",
+                )
+                self.builder.store(
+                    ir.Constant(ir.IntType(8), 0),
+                    empty_text,
+                )
+                self.builder.branch(merge_block)
+                missing_predecessor = self.builder.block
+
+                self.builder.position_at_end(read_block)
+                text_length = self.builder.call(
+                    self.get_window_text_length_function,
+                    [control_window],
+                    name="interface_text_length",
+                )
+                allocation_size = self.builder.zext(text_length, self.int64_type)
+                allocation_size = self.builder.add(
+                    allocation_size,
+                    ir.Constant(self.int64_type, 1),
+                )
+                text_buffer = self.builder.call(
+                    self.malloc_function,
+                    [allocation_size],
+                    name="interface_text_buffer",
+                )
+                self.builder.call(
+                    self.get_window_text_function,
+                    [
+                        control_window,
+                        text_buffer,
+                        self.builder.trunc(allocation_size, self.int32_type),
+                    ],
+                )
+                self.builder.branch(merge_block)
+                read_predecessor = self.builder.block
+
+                self.builder.position_at_end(merge_block)
+                res = self.builder.phi(self.char_pointer_type, name="interface_text_result")
+                res.add_incoming(empty_text, missing_predecessor)
+                res.add_incoming(text_buffer, read_predecessor)
+                return res, "str"
             if node.method_name == "Launch_Window":
                 executable_path = self.get_process_name_argument(node)
                 operation = self.visit_LiteralNode(LiteralNode("str", "open"))[0]
@@ -2137,6 +3511,778 @@ class LLVMCodeGenerator:
                 f"{node.library_name}.{node.method_name} expects "
                 f"{expected_count} argument(s), got {len(node.arguments)}"
             )
+
+    def get_interface_key(self, window_expression, name_expression):
+        if not isinstance(window_expression, LiteralNode) or window_expression.literal_type != "str":
+            raise TypeError("Interface window title must be a string literal")
+        if not isinstance(name_expression, LiteralNode) or name_expression.literal_type != "str":
+            raise TypeError("Interface name must be a string literal")
+        return window_expression.value, name_expression.value
+
+    def get_interface_request_type(self):
+        if self.interface_request_type is None:
+            self.interface_request_type = ir.LiteralStructType(
+                [
+                    self.char_pointer_type,
+                    self.char_pointer_type,
+                    *([self.int32_type] * 13),
+                    self.char_pointer_type,
+                    self.char_pointer_type,
+                    self.int32_type,
+                    self.int32_type,
+                ]
+            )
+        return self.interface_request_type
+
+    def reserve_interface_id(self, key):
+        info = self.interface_ids.get(key)
+        if info is not None:
+            return info["id"]
+        self.interface_id_count += 1
+        if self.interface_id_count > 0xffff:
+            raise ValueError("A program cannot declare or query more than 65535 interfaces")
+        self.interface_ids[key] = {
+            "id": self.interface_id_count,
+            "type": None,
+            "editable": False,
+            "declared": False,
+            "requested_types": [],
+        }
+        return self.interface_id_count
+
+    def register_interface(self, key, interface_type, editable=False):
+        control_id = self.reserve_interface_id(key)
+        existing = self.interface_ids.get(key)
+        if existing is not None and existing["declared"]:
+            raise SyntaxError(
+                f"Interface name '{key[1]}' is already used for window '{key[0]}'"
+            )
+        if existing is not None:
+            for want_ty in existing.get("requested_types", []):
+                if want_ty == "editable":
+                    if interface_type != "label" or not editable:
+                        raise TypeError(
+                            f"Interface '{key[1]}' is not an editable text field"
+                        )
+                elif want_ty != interface_type:
+                    raise TypeError(
+                        f"Interface '{key[1]}' must be a {want_ty}, "
+                        f"not a {interface_type}"
+                    )
+        self.interface_ids[key] = {
+            "id": control_id,
+            "type": interface_type,
+            "editable": editable,
+            "declared": True,
+            "requested_types": (
+                existing.get("requested_types", []) if existing is not None else []
+            ),
+        }
+        return control_id
+
+    def get_interface_id(self, window_expression, name_expression, expected_type=None):
+        key = self.get_interface_key(window_expression, name_expression)
+        self.reserve_interface_id(key)
+        info = self.interface_ids[key]
+        if expected_type is not None and expected_type not in info["requested_types"]:
+            info["requested_types"].append(expected_type)
+        if expected_type == "editable":
+            if info["declared"] and not info["editable"]:
+                raise TypeError(f"Interface '{key[1]}' is not an editable text field")
+        elif (
+            info["declared"]
+            and expected_type is not None
+            and info["type"] != expected_type
+        ):
+            raise TypeError(
+                f"Interface '{key[1]}' must be a {expected_type}, "
+                f"not a {info['type']}"
+            )
+        return info["id"]
+
+    @staticmethod
+    def parse_interface_color(expression, property_name):
+        if not isinstance(expression, LiteralNode) or expression.literal_type != "str":
+            raise TypeError(f"Interface property '{property_name}' must be a '#RRGGBB' string")
+        color = expression.value
+        if len(color) != 7 or color[0] != "#":
+            raise ValueError(
+                f"Interface property '{property_name}' must use '#RRGGBB' format"
+            )
+        try:
+            red = int(color[1:3], 16)
+            green = int(color[3:5], 16)
+            blue = int(color[5:7], 16)
+        except ValueError as error:
+            raise ValueError(
+                f"Interface property '{property_name}' must use '#RRGGBB' format"
+            ) from error
+        return (blue << 16) | (green << 8) | red
+
+    @staticmethod
+    def blend_color(foreground, background, opacity):
+        channels = []
+        for shift in (0, 8, 16):
+            src = (foreground >> shift) & 0xff
+            target = (background >> shift) & 0xff
+            channels.append(round(src * opacity + target * (1.0 - opacity)))
+        return channels[0] | (channels[1] << 8) | (channels[2] << 16)
+
+    def emit_interface_message_pump(self):
+        if self.interface_message_pump_function is None:
+            fn = ir.Function(
+                self.module,
+                ir.FunctionType(ir.VoidType(), []),
+                name="vamp_pump_interface_messages",
+            )
+            fn.linkage = "internal"
+            entry_block = fn.append_basic_block(name="entry")
+            check_block = fn.append_basic_block(name="check")
+            dispatch_block = fn.append_basic_block(name="dispatch")
+            finish_block = fn.append_basic_block(name="finish")
+            pump_builder = ir.IRBuilder(entry_block)
+
+            message_type = ir.LiteralStructType(
+                [
+                    self.char_pointer_type,
+                    self.int32_type,
+                    self.int64_type,
+                    self.int64_type,
+                    self.int32_type,
+                    ir.ArrayType(self.int32_type, 2),
+                ]
+            )
+            msg = pump_builder.alloca(message_type, name="interface_message")
+            message_bytes = pump_builder.bitcast(msg, self.char_pointer_type)
+            pump_builder.branch(check_block)
+            pump_builder.position_at_end(check_block)
+            has_message = pump_builder.call(
+                self.peek_message_function,
+                [
+                    message_bytes,
+                    ir.Constant(self.char_pointer_type, None),
+                    ir.Constant(self.int32_type, 0),
+                    ir.Constant(self.int32_type, 0),
+                    ir.Constant(self.int32_type, 1),
+                ],
+            )
+            pump_builder.cbranch(
+                pump_builder.icmp_signed(
+                    "!=",
+                    has_message,
+                    ir.Constant(self.int32_type, 0),
+                ),
+                dispatch_block,
+                finish_block,
+            )
+            pump_builder.position_at_end(dispatch_block)
+            pump_builder.call(self.translate_message_function, [message_bytes])
+            pump_builder.call(self.dispatch_message_function, [message_bytes])
+            pump_builder.branch(check_block)
+            pump_builder.position_at_end(finish_block)
+            pump_builder.ret_void()
+            self.interface_message_pump_function = fn
+
+        self.builder.call(self.interface_message_pump_function, [])
+
+    def get_interface_parent_function(self):
+        if self.interface_parent_function is not None:
+            return self.interface_parent_function
+
+        context_type = ir.LiteralStructType(
+            [self.char_pointer_type, self.char_pointer_type]
+        )
+        callback_type = ir.FunctionType(
+            self.int32_type,
+            [self.char_pointer_type, self.int64_type],
+        )
+        callback = ir.Function(
+            self.module,
+            callback_type,
+            name="vamp_find_interface_parent_callback",
+        )
+        callback.linkage = "internal"
+        callback.args[0].name = "candidate_window"
+        callback.args[1].name = "context"
+        callback_entry = callback.append_basic_block(name="entry")
+        title_block = callback.append_basic_block(name="check_title")
+        compare_block = callback.append_basic_block(name="compare_title")
+        found_block = callback.append_basic_block(name="found")
+        continue_block = callback.append_basic_block(name="continue")
+        callback_builder = ir.IRBuilder(callback_entry)
+        ctx = callback_builder.inttoptr(
+            callback.args[1],
+            context_type.as_pointer(),
+        )
+        process_id_pointer = callback_builder.alloca(
+            self.int32_type,
+            name="candidate_process_id",
+        )
+        callback_builder.call(
+            self.get_window_thread_process_id_function,
+            [callback.args[0], process_id_pointer],
+        )
+        candidate_process_id = callback_builder.load(process_id_pointer)
+        current_process_id = callback_builder.call(
+            self.get_current_process_id_function,
+            [],
+        )
+        is_own_process = callback_builder.icmp_signed(
+            "==",
+            candidate_process_id,
+            current_process_id,
+        )
+        callback_builder.cbranch(is_own_process, title_block, continue_block)
+
+        callback_builder.position_at_end(title_block)
+        title_buffer_type = ir.ArrayType(self.int32_type, 128)
+        title_buffer = callback_builder.alloca(title_buffer_type, name="candidate_title")
+        title_pointer = callback_builder.bitcast(
+            title_buffer,
+            self.char_pointer_type,
+        )
+        title_length = callback_builder.call(
+            self.get_window_text_function,
+            [
+                callback.args[0],
+                title_pointer,
+                ir.Constant(self.int32_type, 512),
+            ],
+        )
+        has_title = callback_builder.icmp_signed(
+            ">",
+            title_length,
+            ir.Constant(self.int32_type, 0),
+        )
+        callback_builder.cbranch(has_title, compare_block, continue_block)
+
+        callback_builder.position_at_end(compare_block)
+        wanted_title_pointer = callback_builder.gep(
+            ctx,
+            [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 0)],
+        )
+        wanted_title = callback_builder.load(wanted_title_pointer)
+        title_matches = callback_builder.call(
+            self.compare_case_insensitive_function,
+            [title_pointer, wanted_title],
+        )
+        is_match = callback_builder.icmp_signed(
+            "==",
+            title_matches,
+            ir.Constant(self.int32_type, 0),
+        )
+        callback_builder.cbranch(is_match, found_block, continue_block)
+
+        callback_builder.position_at_end(found_block)
+        result_pointer = callback_builder.gep(
+            ctx,
+            [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 1)],
+        )
+        callback_builder.store(callback.args[0], result_pointer)
+        callback_builder.ret(ir.Constant(self.int32_type, 0))
+
+        callback_builder.position_at_end(continue_block)
+        callback_builder.ret(ir.Constant(self.int32_type, 1))
+
+        fn = ir.Function(
+            self.module,
+            ir.FunctionType(self.char_pointer_type, [self.char_pointer_type]),
+            name="vamp_find_interface_parent",
+        )
+        fn.linkage = "internal"
+        fn.args[0].name = "title"
+        entry = fn.append_basic_block(name="entry")
+        builder = ir.IRBuilder(entry)
+        context_pointer = builder.alloca(context_type, name="interface_parent_search")
+        title_pointer = builder.gep(
+            context_pointer,
+            [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 0)],
+        )
+        result_pointer = builder.gep(
+            context_pointer,
+            [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 1)],
+        )
+        builder.store(fn.args[0], title_pointer)
+        builder.store(ir.Constant(self.char_pointer_type, None), result_pointer)
+        builder.call(
+            self.enum_windows_function,
+            [
+                builder.bitcast(callback, self.char_pointer_type),
+                builder.ptrtoint(context_pointer, self.int64_type),
+            ],
+        )
+        res = builder.load(result_pointer, name="interface_parent_window")
+        builder.ret(res)
+        self.interface_parent_function = fn
+        return fn
+
+    def emit_interface_layer_ordering_function(self):
+        helper_type = ir.FunctionType(
+            ir.VoidType(),
+            [
+                self.char_pointer_type,
+                self.char_pointer_type,
+                self.int32_type,
+            ],
+        )
+        helper = ir.Function(
+            self.module,
+            helper_type,
+            name="vamp_order_interface_control",
+        )
+        helper.linkage = "internal"
+        parent, control, layer = helper.args
+        entry = helper.append_basic_block(name="entry")
+        inspect = helper.append_basic_block(name="inspect_sibling")
+        compare = helper.append_basic_block(name="compare_sibling_layer")
+        read_layer = helper.append_basic_block(name="read_sibling_layer")
+        compare_layer = helper.append_basic_block(name="compare_interface_layers")
+        save_anchor = helper.append_basic_block(name="save_layer_anchor")
+        advance = helper.append_basic_block(name="advance_sibling")
+        reorder = helper.append_basic_block(name="reorder_interface_control")
+        builder = ir.IRBuilder(entry)
+        sibling_pointer = builder.alloca(
+            self.char_pointer_type,
+            name="interface_sibling",
+        )
+        anchor_pointer = builder.alloca(
+            self.char_pointer_type,
+            name="interface_layer_anchor",
+        )
+        builder.store(
+            builder.call(
+                self.get_window_function,
+                [parent, ir.Constant(self.int32_type, 5)],
+            ),
+            sibling_pointer,
+        )
+        builder.store(
+            ir.Constant(self.char_pointer_type, None),
+            anchor_pointer,
+        )
+        builder.branch(inspect)
+
+        builder.position_at_end(inspect)
+        sibling = builder.load(sibling_pointer)
+        has_sibling = builder.icmp_unsigned(
+            "!=",
+            sibling,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        builder.cbranch(has_sibling, compare, reorder)
+
+        builder.position_at_end(compare)
+        is_control = builder.icmp_unsigned("==", sibling, control)
+        builder.cbranch(is_control, advance, read_layer)
+
+        builder.position_at_end(read_layer)
+        encoded_sibling_layer = builder.call(
+            self.get_property_function,
+            [
+                sibling,
+                self.constant_string_pointer("vamp.interface.layer"),
+            ],
+        )
+        has_layer = builder.icmp_unsigned(
+            "!=",
+            encoded_sibling_layer,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        builder.cbranch(has_layer, compare_layer, advance)
+
+        builder.position_at_end(compare_layer)
+        sibling_layer = builder.trunc(
+            builder.sub(
+                builder.ptrtoint(encoded_sibling_layer, self.int64_type),
+                ir.Constant(self.int64_type, 2147483649),
+            ),
+            self.int32_type,
+        )
+        is_higher_layer = builder.icmp_signed(">", sibling_layer, layer)
+        builder.cbranch(is_higher_layer, save_anchor, advance)
+
+        builder.position_at_end(save_anchor)
+        builder.store(sibling, anchor_pointer)
+        builder.branch(advance)
+
+        builder.position_at_end(advance)
+        next_sibling = builder.call(
+            self.get_window_function,
+            [sibling, ir.Constant(self.int32_type, 2)],
+        )
+        builder.store(next_sibling, sibling_pointer)
+        builder.branch(inspect)
+
+        builder.position_at_end(reorder)
+        anchor = builder.load(anchor_pointer)
+        has_higher_layer = builder.icmp_unsigned(
+            "!=",
+            anchor,
+            ir.Constant(self.char_pointer_type, None),
+        )
+        insert_after = builder.select(
+            has_higher_layer,
+            anchor,
+            builder.inttoptr(
+                ir.Constant(self.int64_type, 0),
+                self.char_pointer_type,
+            ),
+        )
+        builder.call(
+            self.set_window_pos_function,
+            [
+                control,
+                insert_after,
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0x0013),
+            ],
+        )
+        builder.call(
+            self.redraw_window_function,
+            [
+                parent,
+                ir.Constant(self.char_pointer_type, None),
+                ir.Constant(self.char_pointer_type, None),
+                ir.Constant(self.int32_type, 0x0185),
+            ],
+        )
+        builder.ret_void()
+        return helper
+
+    def emit_interface_creation_function(self, function):
+        order_interfaces = self.emit_interface_layer_ordering_function()
+        entry = function.append_basic_block(name="entry")
+        creation_failed = function.append_basic_block(name="creation_failed")
+        created = function.append_basic_block(name="created")
+        configure_background = function.append_basic_block(name="configure_background")
+        configure_text_color = function.append_basic_block(name="configure_text_color")
+        configure_font = function.append_basic_block(name="configure_font")
+        configure_icon = function.append_basic_block(name="configure_icon")
+        load_icon_block = function.append_basic_block(name="load_icon")
+        show_control = function.append_basic_block(name="show_control")
+        builder = ir.IRBuilder(entry)
+        request = function.args[1]
+        def load_field(index, name):
+            field_pointer = builder.gep(
+                request,
+                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, index)],
+                name=f"{name}_pointer",
+            )
+            return builder.load(field_pointer, name=name)
+
+        cls_name = load_field(0, "interface_class")
+        text = load_field(1, "interface_text")
+        style = load_field(2, "interface_style")
+        x_position = load_field(3, "interface_x")
+        y_position = load_field(4, "interface_y")
+        width = load_field(5, "interface_width")
+        height = load_field(6, "interface_height")
+        control_id = load_field(7, "interface_id")
+        ex_style = load_field(8, "interface_ex_style")
+        layer = load_field(9, "interface_layer")
+        visible = load_field(10, "interface_visible")
+        text_color = load_field(11, "interface_text_color")
+        background_mode = load_field(12, "interface_background_mode")
+        background_color = load_field(13, "interface_background_color")
+        font_size = load_field(14, "interface_font_size")
+        font_name = load_field(15, "interface_font_name")
+        icon_path = load_field(16, "interface_icon_path")
+        icon_kind = load_field(17, "interface_icon_kind")
+        error_pointer = builder.gep(
+            request,
+            [
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 18),
+            ],
+            name="interface_error_pointer",
+        )
+        null_pointer = ir.Constant(self.char_pointer_type, None)
+
+        module_handle = builder.call(
+            self.get_module_handle_function,
+            [null_pointer],
+        )
+        builder.call(
+            self.set_last_error_function,
+            [ir.Constant(self.int32_type, 0)],
+        )
+        control = builder.call(
+            self.create_window_function,
+            [
+                ex_style,
+                cls_name,
+                text,
+                style,
+                x_position,
+                y_position,
+                width,
+                height,
+                function.args[0],
+                builder.inttoptr(control_id, self.char_pointer_type),
+                module_handle,
+                null_pointer,
+            ],
+            name="created_interface_control",
+        )
+        control_created = builder.icmp_unsigned("!=", control, null_pointer)
+        builder.cbranch(control_created, created, creation_failed)
+
+        builder.position_at_end(creation_failed)
+        builder.store(builder.call(self.get_last_error_function, []), error_pointer)
+        builder.ret(null_pointer)
+        builder.position_at_end(created)
+        encoded_layer = builder.add(
+            builder.sext(layer, self.int64_type),
+            ir.Constant(self.int64_type, 2147483649),
+        )
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                self.constant_string_pointer("vamp.interface.layer"),
+                builder.inttoptr(encoded_layer, self.char_pointer_type),
+            ],
+        )
+        has_text_color = builder.icmp_unsigned(
+            "!=",
+            text_color,
+            ir.Constant(self.int32_type, 0),
+        )
+        builder.cbranch(
+            has_text_color,
+            configure_text_color,
+            configure_background,
+        )
+
+        builder.position_at_end(configure_text_color)
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                self.constant_string_pointer("vamp.text.color"),
+                builder.inttoptr(text_color, self.char_pointer_type),
+            ],
+        )
+        builder.branch(configure_background)
+
+        background_transparent = function.append_basic_block(name="background_transparent")
+        background_colored = function.append_basic_block(name="background_colored")
+        background_ready = function.append_basic_block(name="background_ready")
+        builder.position_at_end(configure_background)
+        is_transparent = builder.icmp_signed(
+            "==",
+            background_mode,
+            ir.Constant(self.int32_type, 1),
+        )
+        builder.cbranch(is_transparent, background_transparent, background_colored)
+
+        builder.position_at_end(background_transparent)
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                self.constant_string_pointer("vamp.background.transparent"),
+                ir.Constant(self.int32_type, 1).inttoptr(self.char_pointer_type),
+            ],
+        )
+        builder.branch(background_ready)
+
+        builder.position_at_end(background_colored)
+        has_background_color = builder.icmp_signed(
+            ">",
+            background_mode,
+            ir.Constant(self.int32_type, 1),
+        )
+        create_brush_block = function.append_basic_block(name="create_background_brush")
+        builder.cbranch(has_background_color, create_brush_block, background_ready)
+
+        builder.position_at_end(create_brush_block)
+        brush = builder.call(
+            self.create_solid_brush_function,
+            [background_color],
+            name="interface_background_brush",
+        )
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                self.constant_string_pointer("vamp.background.brush"),
+                brush,
+            ],
+        )
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                self.constant_string_pointer("vamp.background.color"),
+                builder.inttoptr(
+                    builder.add(background_color, ir.Constant(self.int32_type, 1)),
+                    self.char_pointer_type,
+                ),
+            ],
+        )
+        has_background_opacity = builder.icmp_signed(
+            ">",
+            background_mode,
+            ir.Constant(self.int32_type, 2),
+        )
+        set_background_opacity_block = function.append_basic_block(
+            name="set_background_opacity"
+        )
+        builder.cbranch(
+            has_background_opacity,
+            set_background_opacity_block,
+            background_ready,
+        )
+        builder.position_at_end(set_background_opacity_block)
+        encoded_opacity = builder.add(
+            builder.sub(background_mode, ir.Constant(self.int32_type, 3)),
+            ir.Constant(self.int32_type, 1),
+        )
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                self.constant_string_pointer("vamp.background.opacity"),
+                builder.inttoptr(encoded_opacity, self.char_pointer_type),
+            ],
+        )
+        builder.branch(background_ready)
+
+        builder.position_at_end(background_ready)
+        requested_font_size = builder.icmp_signed(
+            ">",
+            font_size,
+            ir.Constant(self.int32_type, 0),
+        )
+        builder.cbranch(requested_font_size, configure_font, configure_icon)
+
+        builder.position_at_end(configure_font)
+        font = builder.call(
+            self.create_font_function,
+            [
+                builder.neg(font_size),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 400),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 1),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                ir.Constant(self.int32_type, 0),
+                font_name,
+            ],
+            name="interface_font",
+        )
+        font_created = builder.icmp_unsigned("!=", font, null_pointer)
+        font_ready = function.append_basic_block(name="font_ready")
+        font_failed = function.append_basic_block(name="font_failed")
+        builder.cbranch(font_created, font_ready, font_failed)
+
+        builder.position_at_end(font_failed)
+        builder.store(builder.call(self.get_last_error_function, []), error_pointer)
+        builder.call(self.destroy_window_function, [control])
+        builder.ret(null_pointer)
+
+        builder.position_at_end(font_ready)
+        builder.call(
+            self.send_message_function,
+            [
+                control,
+                ir.Constant(self.int32_type, 0x0030),
+                builder.ptrtoint(font, self.int64_type),
+                ir.Constant(self.int64_type, 1),
+            ],
+        )
+        builder.branch(configure_icon)
+
+        builder.position_at_end(configure_icon)
+        icon_requested = builder.icmp_unsigned("!=", icon_path, null_pointer)
+        skip_icon_block = function.append_basic_block(name="skip_interface_icon")
+        builder.cbranch(icon_requested, load_icon_block, skip_icon_block)
+
+        builder.position_at_end(load_icon_block)
+        icon = builder.call(
+            self.get_window_icon_function(),
+            [icon_path],
+            name="interface_icon",
+        )
+        has_icon = builder.icmp_unsigned("!=", icon, null_pointer)
+        use_icon_block = function.append_basic_block(name="set_interface_icon")
+        icon_failed = function.append_basic_block(name="interface_icon_failed")
+        builder.cbranch(
+            has_icon,
+            use_icon_block,
+            icon_failed,
+        )
+
+        builder.position_at_end(icon_failed)
+        builder.store(ir.Constant(self.int32_type, 2), error_pointer)
+        builder.call(self.destroy_window_function, [control])
+        builder.ret(null_pointer)
+
+        builder.position_at_end(use_icon_block)
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                self.constant_string_pointer("vamp.interface.icon"),
+                ir.Constant(self.int32_type, 1).inttoptr(self.char_pointer_type),
+            ],
+        )
+        icon_message = builder.select(
+            builder.icmp_signed(
+                "==",
+                icon_kind,
+                ir.Constant(self.int32_type, 1),
+            ),
+            ir.Constant(self.int32_type, 0x00F7),
+            ir.Constant(self.int32_type, 0x0172),
+        )
+        builder.call(
+            self.send_message_function,
+            [
+                control,
+                icon_message,
+                ir.Constant(self.int64_type, 1),
+                builder.ptrtoint(icon, self.int64_type),
+            ],
+        )
+        builder.branch(skip_icon_block)
+
+        builder.position_at_end(skip_icon_block)
+        builder.branch(show_control)
+
+        builder.position_at_end(show_control)
+        is_visible = builder.icmp_signed(
+            "!=",
+            visible,
+            ir.Constant(self.int32_type, 0),
+        )
+        builder.call(
+            self.show_window_function,
+            [
+                control,
+                builder.select(
+                    is_visible,
+                    ir.Constant(self.int32_type, 5),
+                    ir.Constant(self.int32_type, 0),
+                ),
+            ],
+        )
+        builder.call(self.update_window_function, [control])
+        builder.call(
+            order_interfaces,
+            [function.args[0], control, layer],
+        )
+        builder.ret(control)
 
     def get_directory_path_argument(self, node):
         self.require_argument_count(node, 1)

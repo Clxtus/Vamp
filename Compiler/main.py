@@ -64,6 +64,8 @@ def compile_file(source_filepath):
         exe_filename,
         "-lshell32",
         "-luser32",
+        "-lgdi32",
+        "-lmsimg32",
         "-lgdiplus",
     ]
     
