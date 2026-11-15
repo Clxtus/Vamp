@@ -1,31 +1,13 @@
 from llvmlite import ir
+import native
+from diagnostics import SOURCE_CACHE, make_error, suggest
+from language import LanguageCore
+from stdlib import StandardLibrary
+from values import ArrayLiteralValue, ArrayReferenceValue, ClassInstanceValue, DictionaryLiteralValue, PointerValue
 from parser import ArrayAccessNode, ArrayAssignmentNode, ArrayLiteralNode, AssignmentNode, BinaryOpNode, ClassDeclarationNode, ClassInstanceDeclarationNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, MallocNode, MethodCallNode, VariableAccessNode, VariableDeclarationNode, WhileLoopNode, WindowConfigNode, WindowPointNode, WindowSizeNode
 
-class ArrayLiteralValue:
-    def __init__(self, elements, element_type):
-        self.elements = elements
-        self.element_type = element_type
-
-class ArrayReferenceValue:
-    def __init__(self, pointer, element_type, length):
-        self.pointer = pointer
-        self.element_type = element_type
-        self.length = length
-
-class DictionaryLiteralValue:
-    def __init__(self, entries):
-        self.entries = entries
-
-class ClassInstanceValue:
-    def __init__(self, pointer):
-        self.pointer = pointer
-
-class PointerValue:
-    def __init__(self, pointer, element_type):
-        self.pointer = pointer
-        self.element_type = element_type
-
-class LLVMCodeGenerator:
+# os lib + windows/ui codegen. oldest part of the compiler, change with care
+class OsCodeGenerator:
     def __init__(self):
         self.module = ir.Module(name="vamp_module")
         self.builder = None
@@ -38,7 +20,15 @@ class LLVMCodeGenerator:
         self.class_methods = {}
         self.emitted_class_methods = set()
         self.imported_libraries = set()
+        self.native_modules = {}
+        self.native_used = {}
+        self.native_declared = {}
+        self.native_build = native.NativeBuildInfo()
+        self.function_signatures = {}
+        self.current_location = None
         self.string_literal_count = 0
+        self.narrow_os_values = False
+        self.window_ui_styles = {}
 
         self.int32_type = ir.IntType(32)
         self.int64_type = ir.IntType(64)
@@ -425,6 +415,21 @@ class LLVMCodeGenerator:
         self.interface_creation_function = None
         self.interface_request_type = None
         self.interface_parent_function = None
+        self.interface_order_function = None
+        self.interface_operation_function = None
+        self.interface_operation_request_type = None
+        self.interface_operation_request_global = None
+        self.interface_call_function = None
+        self.interface_window_caches = {}
+        self.interface_groups = {}
+        self.interface_group_slots = {}
+        self.interface_group_functions = {}
+        self.interface_group_member_function = None
+        self.window_apply_function = None
+        self.interned_strings = {}
+        self.window_apply_used = False
+        self.interface_operation_used = False
+        self.window_apply_arguments = None
 
         self.register_window_class_function = ir.Function(
             self.module,
@@ -661,22 +666,16 @@ class LLVMCodeGenerator:
         )
 
     def generate_code(self, program):
-        class_declarations = [
-            stmt for stmt in program
-            if isinstance(stmt, ClassDeclarationNode)
-        ]
-        for decl in class_declarations:
-            self.register_class_tree(decl)
-        for decl in class_declarations:
-            self.declare_class_methods(decl)
-
         main_type = ir.FunctionType(self.int32_type, [])
         main_function = ir.Function(self.module, main_type, name="main")
         entry_block = main_function.append_basic_block(name="entry")
         self.builder = ir.IRBuilder(entry_block)
 
-        for stmt in program:
-            self.visit(stmt)
+        self.prepare_program(program)
+        self.visit_block(program)
+        if self.builder.block.is_terminated:
+            self.builder.position_at_end(main_function.append_basic_block(name="after_program"))
+        self.finish_program()
 
         undeclared_interfaces = [
             key
@@ -688,6 +687,9 @@ class LLVMCodeGenerator:
             raise NameError(
                 f"Interface '{interface_name}' for window '{window_title}' is not declared"
             )
+
+        self.finalize_interface_groups()
+        self.finalize_window_runtime()
 
         if self.active_windows_global is not None:
             check_block = main_function.append_basic_block(name="check_open_windows")
@@ -715,6 +717,7 @@ class LLVMCodeGenerator:
             self.builder.position_at_end(finish_block)
 
         self.builder.ret(ir.Constant(self.int32_type, 0))
+        self.native_build = self.build_native_info()
         return str(self.module)
 
     def constant_string_pointer(self, value):
@@ -733,31 +736,181 @@ class LLVMCodeGenerator:
         string_global.initializer = string_constant
         return string_global.bitcast(self.char_pointer_type)
 
+    LOCATED_ERRORS = (SyntaxError, NameError, TypeError, ValueError, ImportError, NotImplementedError)
+
     def visit(self, node):
+        if self.narrow_os_values:
+            self.narrow_os_values = False
+            try:
+                res = self.visit(node)
+            finally:
+                self.narrow_os_values = True
+            return self.narrow_for_os(res)
         visitor_name = f"visit_{type(node).__name__}"
         visitor = getattr(self, visitor_name, self.visit_unhandled_node)
-        return visitor(node)
+        line = getattr(node, "line", None)
+        if line is None:
+            return visitor(node)
+        try:
+            return visitor(node)
+        except self.LOCATED_ERRORS as err:
+            if getattr(err, "vamp_located", False):
+                raise
+            filename = getattr(node, "filename", None)
+            located = make_error(
+                type(err), str(err), filename, line, getattr(node, "column", 0),
+                SOURCE_CACHE.get(filename),
+            )
+            raise located from None
 
     def visit_unhandled_node(self, node):
         raise NotImplementedError(f"No visit_{type(node).__name__} method defined.")
 
     def visit_LibraryImportNode(self, node):
-        self.imported_libraries.add(node.library_name)
+        if node.alias is None and not node.members:
+            self.imported_libraries.add(node.library_name)
 
     def visit_ImportFileNode(self, node):
         pass
 
-    def visit_ClassDeclarationNode(self, node):
-        self.emit_class_methods(node)
+    def visit_ModuleImportNode(self, node):
+        for stmt in node.statements:
+            self.visit(stmt)
 
-    def visit_ClassInstanceDeclarationNode(self, node):
-        instance_value, instance_type = self.visit(node.initializer)
-        if not isinstance(instance_value, ClassInstanceValue):
-            raise TypeError(f"'{node.instance_name}' must be initialized with a class instance")
-        self.variable_pointers[node.instance_name] = instance_value.pointer
-        self.type_information[node.instance_name] = instance_type
-        self.array_information.pop(node.instance_name, None)
-        self.dictionary_information.pop(node.instance_name, None)
+    def visit_NativeImportNode(self, node):
+        self.native_modules[node.module.module_id] = node.module
+
+    # os runtime fns take i32/f32, so int/float get narrowed going in (see visit())
+    def narrow_for_os(self, result):
+        if not isinstance(result, tuple) or len(result) != 2:
+            return result
+        value, val_ty = result
+        if val_ty in ("int", "i32") and isinstance(getattr(value, "type", None), ir.IntType):
+            return self.fit_integer(value, self.int32_type), "int"
+        if val_ty in ("float", "f32") and isinstance(getattr(value, "type", None), (ir.FloatType, ir.DoubleType)):
+            if isinstance(value.type, ir.DoubleType):
+                value = self.builder.fptrunc(value, self.float_type)
+            return value, "float"
+        return result
+
+    UI_STYLES = {"classic": 0, "native": 1, "modern": 2}
+
+    def parse_ui_style(self, expression, owner):
+        if (
+            not isinstance(expression, LiteralNode)
+            or expression.literal_type != "str"
+            or expression.value not in self.UI_STYLES
+        ):
+            raise ValueError(f"{owner} property 'style' must be \"classic\", \"native\" or \"modern\"")
+        return self.UI_STYLES[expression.value]
+
+    def native_llvm_type(self, kind):
+        return {
+            "int": self.int64_type,
+            "float": ir.DoubleType(),
+            "bool": self.int32_type,
+            "str": self.char_pointer_type,
+            "void": ir.VoidType(),
+        }[kind]
+
+    def describe_native_candidates(self, candidates):
+        lines = []
+        for fn in candidates:
+            if fn.problem:
+                lines.append(f"    {fn.signature_text()}  - cannot be called: {fn.problem}")
+                continue
+            bad = [(text, reason) for text, kind, reason in fn.parameters if kind is None]
+            if bad:
+                lines.append(f"    {fn.signature_text()}  - cannot be called: {bad[0][1]}")
+            elif fn.return_type[1] is None:
+                lines.append(f"    {fn.signature_text()}  - cannot be called: return {fn.return_type[2]}")
+            else:
+                kinds = ", ".join(fn.vamp_parameter_kinds())
+                lines.append(f"    {fn.signature_text()}  -> Vamp ({kinds}) : {fn.return_type[1]}")
+        return "\n".join(lines)
+
+    def visit_NativeCallNode(self, node):
+        module = node.module
+        self.native_modules.setdefault(module.module_id, module)
+        candidates = module.functions.get(node.function_name, [])
+        vals = []
+        types = []
+        for arg in node.arguments:
+            value, val_ty = self.visit(arg)
+            vals.append(value)
+            types.append(val_ty)
+
+        def usable(function):
+            return (
+                function.problem is None
+                and function.return_type[1] is not None
+                and all(kind is not None for kind in function.vamp_parameter_kinds())
+            )
+
+        matches = [
+            (idx, function) for idx, function in enumerate(candidates)
+            if usable(function) and function.vamp_parameter_kinds() == types
+        ]
+        shown = f"{node.function_name}({', '.join(types)})"
+        if not matches:
+            if len(candidates) == 1 and usable(candidates[0]) and len(candidates[0].parameters) != len(types):
+                function = candidates[0]
+                raise TypeError(
+                    f"C++ function '{function.qualified_name}' expects {len(function.parameters)} "
+                    f"argument{'s' if len(function.parameters) != 1 else ''}, got {len(types)}"
+                )
+            raise TypeError(
+                f"No C++ function matches the call {shown}\n  candidates in {module.path}:\n"
+                + self.describe_native_candidates(candidates)
+            )
+        if len(matches) > 1:
+            raise TypeError(
+                f"The call {shown} is ambiguous: more than one C++ overload accepts these Vamp types\n"
+                + self.describe_native_candidates([function for _, function in matches])
+            )
+        idx, function = matches[0]
+        symbol = native.bridge_symbol(module.module_id, function.name, idx)
+        declared = self.native_declared.get(symbol)
+        if declared is None:
+            return_kind = function.return_type[1]
+            function_type = ir.FunctionType(
+                self.native_llvm_type(return_kind),
+                [self.native_llvm_type(kind) for kind in function.vamp_parameter_kinds()],
+            )
+            declared = ir.Function(self.module, function_type, name=symbol)
+            self.native_declared[symbol] = declared
+            self.native_used.setdefault(module.module_id, {})[(function.name, idx)] = (function, idx)
+        args = []
+        for value, kind in zip(vals, function.vamp_parameter_kinds()):
+            if kind == "bool":
+                value = self.builder.zext(value, self.int32_type)
+            args.append(value)
+        return_kind = function.return_type[1]
+        if return_kind == "void":
+            self.builder.call(declared, args)
+            return None, "void"
+        res = self.builder.call(declared, args, name=f"{function.name}_result")
+        if return_kind == "bool":
+            res = self.builder.icmp_signed("!=", res, ir.Constant(self.int32_type, 0), name=f"{function.name}_flag")
+        return res, return_kind
+
+    def build_native_info(self):
+        info = native.NativeBuildInfo()
+        for module_id in sorted(self.native_used):
+            module = self.native_modules[module_id]
+            uses = self.native_used[module_id]
+            ordered = [uses[key] for key in sorted(uses)]
+            info.sources.append((module.path, native.generate_bridge_source(module, ordered)))
+            for implementation in module.implementations:
+                if (implementation, None) not in info.sources:
+                    info.sources.append((implementation, None))
+            for link_input in module.link_inputs:
+                if link_input not in info.link_inputs:
+                    info.link_inputs.append(link_input)
+            if module.include_dir not in info.include_dirs:
+                info.include_dirs.append(module.include_dir)
+        info.runtime_units = sorted(self.runtime_units)
+        return info
 
     def allocate_bytes(self, size, name=None):
         if size.type == self.int32_type:
@@ -767,212 +920,6 @@ class LLVMCodeGenerator:
         if name is None:
             return self.builder.call(self.malloc_function, [size])
         return self.builder.call(self.malloc_function, [size], name=name)
-
-    def visit_MallocNode(self, node):
-        cnt, count_type = self.visit(node.count)
-        if count_type != "int":
-            raise TypeError(f"malloc element count must be int, got {count_type}")
-        if isinstance(node.count, LiteralNode) and node.count.value <= 0:
-            raise ValueError("malloc element count must be greater than zero")
-
-        fn = self.builder.function
-        valid_count = self.builder.icmp_signed(
-            ">",
-            cnt,
-            ir.Constant(self.int32_type, 0),
-            name="malloc_valid_count",
-        )
-        allocation_block = fn.append_basic_block(name="malloc_allocate")
-        error_block = fn.append_basic_block(name="malloc_invalid_count")
-        self.builder.cbranch(valid_count, allocation_block, error_block)
-
-        self.builder.position_at_end(error_block)
-        error_message = self.visit_LiteralNode(
-            LiteralNode("str", "Error: malloc element count must be greater than zero\n")
-        )[0]
-        self.builder.call(self.printf_function, [error_message])
-        self.builder.call(self.exit_function, [ir.Constant(self.int32_type, 1)])
-        self.builder.unreachable()
-
-        self.builder.position_at_end(allocation_block)
-        elem_ty = self.llvm_type_for(node.element_type)
-        element_size = {
-            "int": 4,
-            "float": 4,
-            "bool": 1,
-            "str": 8,
-        }[node.element_type]
-        count_64 = self.builder.zext(cnt, self.int64_type, name="malloc_element_count")
-        byte_count = self.builder.mul(
-            count_64,
-            ir.Constant(self.int64_type, element_size),
-            name="malloc_byte_count",
-        )
-        raw_pointer = self.allocate_bytes(byte_count, name="malloc_raw_pointer")
-        allocation_failed = self.builder.icmp_unsigned(
-            "==",
-            raw_pointer,
-            ir.Constant(self.char_pointer_type, None),
-            name="malloc_failed",
-        )
-        failed_block = fn.append_basic_block(name="malloc_failed")
-        success_block = fn.append_basic_block(name="malloc_success")
-        self.builder.cbranch(allocation_failed, failed_block, success_block)
-
-        self.builder.position_at_end(failed_block)
-        error_message = self.visit_LiteralNode(
-            LiteralNode("str", "Error: malloc could not allocate memory\n")
-        )[0]
-        self.builder.call(self.printf_function, [error_message])
-        self.builder.call(self.exit_function, [ir.Constant(self.int32_type, 1)])
-        self.builder.unreachable()
-
-        self.builder.position_at_end(success_block)
-        typed_pointer = self.builder.bitcast(
-            raw_pointer,
-            elem_ty.as_pointer(),
-            name="malloc_typed_pointer",
-        )
-        return PointerValue(typed_pointer, node.element_type), f"pointer:{node.element_type}"
-
-    def visit_AssignmentNode(self, node):
-        variable_pointer = self.variable_pointers.get(node.variable_name)
-        if node.operator == "=":
-            value, val_ty = self.visit(node.expression)
-            if variable_pointer is None:
-                if not isinstance(value, ClassInstanceValue):
-                    raise NameError(f"Variable '{node.variable_name}' is not declared")
-                self.variable_pointers[node.variable_name] = value.pointer
-                self.type_information[node.variable_name] = val_ty
-                self.array_information.pop(node.variable_name, None)
-                self.dictionary_information.pop(node.variable_name, None)
-                return
-            if isinstance(value, PointerValue):
-                value = value.pointer
-        else:
-            if variable_pointer is None:
-                raise NameError(f"Variable '{node.variable_name}' is not declared")
-            value, val_ty = self.visit(
-                BinaryOpNode(
-                    VariableAccessNode(node.variable_name),
-                    node.operator[0],
-                    node.expression,
-                )
-            )
-
-        if node.variable_name in self.constant_variables:
-            raise TypeError(f"Cannot assign to constant '{node.variable_name}'")
-        want_ty = self.type_information[node.variable_name]
-        if want_ty not in ("int", "float", "bool", "str") and not want_ty.startswith("pointer:"):
-            raise TypeError(f"Assignment to values of type '{want_ty}' is not supported")
-        if val_ty != want_ty:
-            raise TypeError(
-                f"Cannot assign {val_ty} to variable '{node.variable_name}' of type {want_ty}"
-            )
-        self.builder.store(value, variable_pointer)
-
-    def register_class_tree(self, node, parent_name=None):
-        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
-        if qualified_name in self.class_definitions:
-            raise SyntaxError(f"Class '{qualified_name}' is already declared")
-
-        fields = {}
-        llvm_field_types = []
-        for field_index, (field_name, field_ty, is_constant) in enumerate(node.fields):
-            if field_name in fields:
-                raise SyntaxError(f"Duplicate field '{field_name}' in class '{qualified_name}'")
-            fields[field_name] = (field_index, field_ty, is_constant)
-            llvm_field_types.append(self.llvm_type_for(field_ty))
-
-        nested_classes = {
-            nested.class_name: f"{qualified_name}.{nested.class_name}"
-            for nested in node.nested_classes
-        }
-        self.class_definitions[qualified_name] = {
-            "fields": fields,
-            "field_order": [field_name for field_name, _, _ in node.fields],
-            "llvm_type": ir.LiteralStructType(llvm_field_types),
-            "nested_classes": nested_classes,
-            "methods": node.methods,
-        }
-
-        for nested_class in node.nested_classes:
-            self.register_class_tree(nested_class, qualified_name)
-
-    def declare_class_methods(self, node, parent_name=None):
-        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
-        for meth in node.methods:
-            method_key = (qualified_name, meth.function_name)
-            if method_key in self.class_methods:
-                raise SyntaxError(
-                    f"Method '{meth.function_name}' is already declared on '{qualified_name}'"
-                )
-
-            parameter_types = [self.llvm_type_for(parameter_type) for _, parameter_type in meth.parameters]
-            function_type = ir.FunctionType(
-                self.llvm_type_for(meth.return_type),
-                [self.class_definitions[qualified_name]["llvm_type"].as_pointer(), *parameter_types],
-            )
-            function_name = f"{qualified_name.replace('.', '__')}__{meth.function_name}"
-            fn = ir.Function(self.module, function_type, name=function_name)
-            self.class_methods[method_key] = {
-                "function": fn,
-                "return_type": meth.return_type,
-                "parameters": meth.parameters,
-                "declaration": meth,
-            }
-
-        for nested_class in node.nested_classes:
-            self.declare_class_methods(nested_class, qualified_name)
-
-    def emit_class_methods(self, node, parent_name=None):
-        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
-        for meth in node.methods:
-            method_key = (qualified_name, meth.function_name)
-            if method_key in self.emitted_class_methods:
-                continue
-            self.emitted_class_methods.add(method_key)
-            method_information = self.class_methods[method_key]
-            previous_builder = self.builder
-            previous_variable_pointers = self.variable_pointers.copy()
-            previous_type_information = self.type_information.copy()
-            previous_array_information = self.array_information.copy()
-            previous_dictionary_information = self.dictionary_information.copy()
-            previous_constant_variables = self.constant_variables.copy()
-
-            fn = method_information["function"]
-            entry_block = fn.append_basic_block(name="entry")
-            self.builder = ir.IRBuilder(entry_block)
-            self.variable_pointers["self"] = fn.args[0]
-            self.type_information["self"] = f"class:{qualified_name}"
-
-            for argument_index, (parameter_name, parameter_type) in enumerate(meth.parameters, start=1):
-                parameter_pointer = self.builder.alloca(self.llvm_type_for(parameter_type), name=parameter_name)
-                self.builder.store(fn.args[argument_index], parameter_pointer)
-                self.variable_pointers[parameter_name] = parameter_pointer
-                self.type_information[parameter_name] = parameter_type
-
-            for stmt in meth.body:
-                self.visit(stmt)
-
-            if not self.builder.block.is_terminated:
-                if isinstance(fn.function_type.return_type, ir.VoidType):
-                    raise SyntaxError(
-                        f"Method '{qualified_name}.{meth.function_name}' must end with 'return : void'"
-                    )
-                raise SyntaxError(
-                    f"Method '{qualified_name}.{meth.function_name}' must return a value"
-                )
-
-            self.builder = previous_builder
-            self.variable_pointers = previous_variable_pointers
-            self.type_information = previous_type_information
-            self.array_information = previous_array_information
-            self.dictionary_information = previous_dictionary_information
-            self.constant_variables = previous_constant_variables
-
-        for nested_class in node.nested_classes:
-            self.emit_class_methods(nested_class, qualified_name)
 
     def get_window_icon_function(self):
         if self.window_icon_function is not None:
@@ -1178,6 +1125,18 @@ class LLVMCodeGenerator:
         interface_creation_function.args[0].name = "parent_window"
         interface_creation_function.args[1].name = "request"
         self.interface_creation_function = interface_creation_function
+        interface_operation_function = ir.Function(
+            self.module,
+            ir.FunctionType(
+                self.int32_type,
+                [pointer_type, self.get_interface_operation_request_type().as_pointer()],
+            ),
+            name="vamp_interface_operation",
+        )
+        interface_operation_function.linkage = "internal"
+        interface_operation_function.args[0].name = "parent_window"
+        interface_operation_function.args[1].name = "request"
+        self.interface_operation_function = interface_operation_function
         icon_background_brush_function = (
             self.emit_interface_icon_background_brush_function()
         )
@@ -1211,6 +1170,8 @@ class LLVMCodeGenerator:
         destroy_block = window_proc.append_basic_block(name="destroy")
         interface_check_block = window_proc.append_basic_block(name="interface_check")
         interface_create_block = window_proc.append_basic_block(name="interface_create")
+        operation_check_block = window_proc.append_basic_block(name="interface_operation_check")
+        operation_block = window_proc.append_basic_block(name="interface_operation")
         color_check_block = window_proc.append_basic_block(name="color_check")
         color_block = window_proc.append_basic_block(name="control_color")
         command_check_block = window_proc.append_basic_block(name="command_check")
@@ -1239,7 +1200,7 @@ class LLVMCodeGenerator:
         proc_builder.cbranch(
             is_interface_create,
             interface_create_block,
-            color_check_block,
+            operation_check_block,
         )
 
         proc_builder.position_at_end(interface_create_block)
@@ -1252,6 +1213,29 @@ class LLVMCodeGenerator:
             [window_proc.args[0], interface_request],
         )
         proc_builder.ret(proc_builder.ptrtoint(created_control, self.int64_type))
+
+        proc_builder.position_at_end(operation_check_block)
+        is_interface_operation = proc_builder.icmp_signed(
+            "==",
+            window_proc.args[1],
+            ir.Constant(self.int32_type, 0x8002),
+        )
+        proc_builder.cbranch(
+            is_interface_operation,
+            operation_block,
+            color_check_block,
+        )
+
+        proc_builder.position_at_end(operation_block)
+        operation_request = proc_builder.inttoptr(
+            window_proc.args[3],
+            self.get_interface_operation_request_type().as_pointer(),
+        )
+        operation_result = proc_builder.call(
+            interface_operation_function,
+            [window_proc.args[0], operation_request],
+        )
+        proc_builder.ret(proc_builder.sext(operation_result, self.int64_type))
 
         proc_builder.position_at_end(color_check_block)
         msg = window_proc.args[1]
@@ -1741,6 +1725,34 @@ class LLVMCodeGenerator:
         )
         self.active_windows_global.initializer = ir.Constant(self.int32_type, 0)
 
+        window_arguments = {}
+        for argument_name, argument_type in (
+            ("a", self.int32_type),
+            ("b", self.int32_type),
+            ("result", self.int32_type),
+            ("text", pointer_type),
+        ):
+            argument_global = ir.GlobalVariable(
+                self.module,
+                argument_type,
+                name=f"vamp_window_argument_{argument_name}",
+            )
+            argument_global.initializer = ir.Constant(
+                argument_type,
+                None if argument_type is pointer_type else 0,
+            )
+            window_arguments[argument_name] = argument_global
+        self.window_apply_arguments = window_arguments
+        window_apply = ir.Function(
+            self.module,
+            ir.FunctionType(self.int32_type, [pointer_type, self.int32_type]),
+            name="vamp_window_apply",
+        )
+        window_apply.linkage = "internal"
+        window_apply.args[0].name = "window"
+        window_apply.args[1].name = "mode"
+        self.window_apply_function = window_apply
+
         callback_type = ir.FunctionType(
             self.int32_type,
             [pointer_type, self.int64_type],
@@ -1833,7 +1845,29 @@ class LLVMCodeGenerator:
             mode,
             ir.Constant(self.int32_type, 2),
         )
-        callback_builder.cbranch(is_close, query_block, callback_stop)
+        apply_check_block = callback.append_basic_block(name="apply_check")
+        apply_block = callback.append_basic_block(name="apply")
+        callback_builder.cbranch(is_close, query_block, apply_check_block)
+
+        callback_builder.position_at_end(apply_check_block)
+        is_apply = callback_builder.icmp_signed(
+            ">=",
+            mode,
+            ir.Constant(self.int32_type, 4),
+        )
+        callback_builder.cbranch(is_apply, apply_block, callback_stop)
+
+        callback_builder.position_at_end(apply_block)
+        apply_result = callback_builder.call(
+            window_apply,
+            [callback.args[0], mode],
+        )
+        apply_succeeded = callback_builder.icmp_signed(
+            "!=",
+            apply_result,
+            ir.Constant(self.int32_type, 0),
+        )
+        callback_builder.cbranch(apply_succeeded, callback_stop, callback_continue)
 
         callback_builder.position_at_end(query_block)
         close_posted = callback_builder.call(
@@ -1909,6 +1943,8 @@ class LLVMCodeGenerator:
                 self.int32_type,
                 self.int32_type,
                 pointer_type,
+                self.int32_type,
+                self.int32_type,
             ]
         )
         thread_type = ir.FunctionType(self.int32_type, [pointer_type])
@@ -1998,12 +2034,27 @@ class LLVMCodeGenerator:
             loaded_icon,
             ir.Constant(pointer_type, None),
         )
-        thread_builder.cbranch(icon_load_succeeded, icon_ready_block, signal_failure_block)
+        icon_warning_block = window_thread.append_basic_block(name="window_icon_warning")
+        thread_builder.cbranch(icon_load_succeeded, icon_ready_block, icon_warning_block)
+
+        thread_builder.position_at_end(icon_warning_block)
+        thread_builder.call(
+            self.printf_function,
+            [
+                self.constant_string_pointer(
+                    "Warning: could not load window icon '%s' (paths are relative to the folder "
+                    "the program runs in); the window opens without it\n"
+                ),
+                icon_path,
+            ],
+        )
+        thread_builder.branch(icon_ready_block)
 
         thread_builder.position_at_end(icon_ready_block)
         icon_handle = thread_builder.phi(pointer_type, name="window_icon_handle")
         icon_handle.add_incoming(ir.Constant(pointer_type, None), thread_entry)
         icon_handle.add_incoming(loaded_icon, load_icon_block)
+        icon_handle.add_incoming(ir.Constant(pointer_type, None), icon_warning_block)
         cls_name = self.constant_string_pointer("VampNativeWindow")
         wnd_class_type = ir.LiteralStructType(
             [
@@ -2187,6 +2238,15 @@ class LLVMCodeGenerator:
         )
 
         thread_builder.position_at_end(pump_block)
+        ui_style = thread_builder.load(thread_builder.gep(
+            context_pointer, [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 8)]))
+        ui_theme = thread_builder.load(thread_builder.gep(
+            context_pointer, [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 9)]))
+        thread_builder.call(
+            self.runtime_function(
+                "vamp_ui_style_window", ir.VoidType(), [pointer_type, self.int32_type, self.int32_type]),
+            [window, ui_style, ui_theme],
+        )
         thread_builder.call(
             self.send_message_function,
             [
@@ -2327,8 +2387,1281 @@ class LLVMCodeGenerator:
             "thread": window_thread,
             "context_type": context_type,
             "operation": operation,
+            "arguments": window_arguments,
         }
         return self.window_runtime_functions
+
+
+    def finalize_window_runtime(self):
+        if self.window_runtime_functions is None:
+            return
+        if self.window_apply_used:
+            self.emit_window_apply_function(self.window_apply_arguments)
+        else:
+            stub = ir.IRBuilder(self.window_apply_function.append_basic_block(name="entry"))
+            stub.ret(ir.Constant(self.int32_type, 0))
+        if self.interface_operation_used:
+            self.emit_interface_operation_function(self.interface_operation_function)
+        else:
+            stub = ir.IRBuilder(self.interface_operation_function.append_basic_block(name="entry"))
+            stub.ret(ir.Constant(self.int32_type, 0))
+
+    def get_win32_function(self, name, return_type, parameter_types):
+        existing = self.module.globals.get(name)
+        if existing is not None:
+            return existing
+        fn = ir.Function(
+            self.module,
+            ir.FunctionType(return_type, parameter_types),
+            name=name,
+        )
+        return fn
+
+    def interned_string(self, value):
+        ptr = self.interned_strings.get(value)
+        if ptr is None:
+            ptr = self.constant_string_pointer(value)
+            self.interned_strings[value] = ptr
+        return ptr
+
+    def get_interface_operation_request_type(self):
+        if self.interface_operation_request_type is None:
+            self.interface_operation_request_type = ir.LiteralStructType(
+                [
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.char_pointer_type,
+                ]
+            )
+        return self.interface_operation_request_type
+
+    def emit_window_apply_function(self, arguments):
+        int32 = self.int32_type
+        ptr = self.char_pointer_type
+        null = ir.Constant(ptr, None)
+
+        def const(value):
+            return ir.Constant(int32, value)
+
+        set_window_text = self.get_win32_function("SetWindowTextA", int32, [ptr, ptr])
+        get_window_rect = self.get_win32_function("GetWindowRect", int32, [ptr, ptr])
+        is_iconic = self.get_win32_function("IsIconic", int32, [ptr])
+        is_zoomed = self.get_win32_function("IsZoomed", int32, [ptr])
+        set_foreground = self.get_win32_function("SetForegroundWindow", int32, [ptr])
+
+        fn = self.window_apply_function
+        window, mode = fn.args
+        entry = fn.append_basic_block(name="entry")
+        exit_block = fn.append_basic_block(name="exit")
+        default_block = fn.append_basic_block(name="unsupported_mode")
+        builder = ir.IRBuilder(entry)
+        first = builder.load(arguments["a"], name="argument_a")
+        second = builder.load(arguments["b"], name="argument_b")
+        text = builder.load(arguments["text"], name="argument_text")
+        rect = builder.alloca(ir.ArrayType(int32, 4), name="window_rect")
+        rect_pointer = builder.bitcast(rect, ptr)
+        process_id = builder.alloca(int32, name="window_process_id")
+        title_buffer = builder.alloca(ir.ArrayType(ir.IntType(8), 512), name="window_title_buffer")
+        title_buffer_pointer = builder.bitcast(title_buffer, ptr)
+        switch = builder.switch(mode, default_block)
+        incoming = []
+
+        def start(codes, name):
+            block = fn.append_basic_block(name=name)
+            for code in codes:
+                switch.add_case(const(code), block)
+            builder.position_at_end(block)
+            return block
+
+        def finish(value):
+            incoming.append((value, builder.block))
+            builder.branch(exit_block)
+
+        def positive(value):
+            return builder.icmp_signed(">", value, const(0))
+
+        start([4], "set_title")
+        remember_title = fn.append_basic_block(name="remember_title")
+        change_title = fn.append_basic_block(name="change_title")
+        builder.call(self.get_window_thread_process_id_function, [window, process_id])
+        owned_here = builder.icmp_signed(
+            "==",
+            builder.load(process_id),
+            builder.call(self.get_current_process_id_function, []),
+        )
+        unkeyed = builder.icmp_unsigned(
+            "==",
+            builder.call(self.get_property_function, [window, self.interned_string("vamp.window.key")]),
+            null,
+        )
+        builder.cbranch(builder.and_(owned_here, unkeyed), remember_title, change_title)
+        builder.position_at_end(remember_title)
+        title_length = builder.call(
+            self.get_window_text_function,
+            [window, title_buffer_pointer, const(512)],
+        )
+        key_copy = builder.call(
+            self.malloc_function,
+            [builder.add(builder.zext(title_length, self.int64_type), ir.Constant(self.int64_type, 1))],
+        )
+        builder.call(self.strcpy_function, [key_copy, title_buffer_pointer])
+        builder.call(
+            self.set_property_function,
+            [window, self.interned_string("vamp.window.key"), key_copy],
+        )
+        builder.branch(change_title)
+        builder.position_at_end(change_title)
+        finish(builder.call(set_window_text, [window, text]))
+
+        start([5], "resize")
+        resize_apply = fn.append_basic_block(name="resize_apply")
+        resize_invalid = fn.append_basic_block(name="resize_invalid")
+        builder.cbranch(
+            builder.and_(positive(first), positive(second)),
+            resize_apply,
+            resize_invalid,
+        )
+        builder.position_at_end(resize_invalid)
+        finish(const(0))
+        builder.position_at_end(resize_apply)
+        finish(
+            builder.call(
+                self.set_window_pos_function,
+                [window, null, const(0), const(0), first, second, const(0x0016)],
+            )
+        )
+
+        start([6], "move")
+        finish(
+            builder.call(
+                self.set_window_pos_function,
+                [window, null, first, second, const(0), const(0), const(0x0015)],
+            )
+        )
+
+        for code, show_command, name in ((7, 6, "minimize"), (8, 3, "maximize"), (9, 9, "restore")):
+            start([code], name)
+            builder.call(self.show_window_function, [window, const(show_command)])
+            finish(const(1))
+
+        start([10], "focus")
+        restore_first = fn.append_basic_block(name="focus_restore")
+        bring_front = fn.append_basic_block(name="focus_front")
+        builder.cbranch(
+            builder.icmp_signed("!=", builder.call(is_iconic, [window]), const(0)),
+            restore_first,
+            bring_front,
+        )
+        builder.position_at_end(restore_first)
+        builder.call(self.show_window_function, [window, const(9)])
+        builder.branch(bring_front)
+        builder.position_at_end(bring_front)
+        finish(builder.call(set_foreground, [window]))
+
+        start([11, 12, 13, 14], "measure")
+        rect_read = fn.append_basic_block(name="measure_read")
+        rect_failed = fn.append_basic_block(name="measure_failed")
+        builder.cbranch(
+            builder.icmp_signed("!=", builder.call(get_window_rect, [window, rect_pointer]), const(0)),
+            rect_read,
+            rect_failed,
+        )
+        builder.position_at_end(rect_failed)
+        finish(const(0))
+        builder.position_at_end(rect_read)
+        edges = [
+            builder.load(builder.gep(rect, [const(0), const(idx)]))
+            for idx in range(4)
+        ]
+        left, top, right, bottom = edges
+        measured = builder.select(
+            builder.icmp_signed("==", mode, const(11)),
+            builder.sub(right, left),
+            builder.select(
+                builder.icmp_signed("==", mode, const(12)),
+                builder.sub(bottom, top),
+                builder.select(builder.icmp_signed("==", mode, const(13)), left, top),
+            ),
+        )
+        builder.store(measured, arguments["result"])
+        finish(const(1))
+
+        for code, query, name in ((15, is_iconic, "query_minimized"), (16, is_zoomed, "query_maximized")):
+            start([code], name)
+            state = builder.icmp_signed("!=", builder.call(query, [window]), const(0))
+            builder.store(builder.zext(state, int32), arguments["result"])
+            finish(const(1))
+
+        start([17], "set_icon")
+        icon_loaded = fn.append_basic_block(name="icon_loaded")
+        icon_missing = fn.append_basic_block(name="icon_missing")
+        icon = builder.call(self.get_window_icon_function(), [text], name="window_icon")
+        builder.cbranch(builder.icmp_unsigned("!=", icon, null), icon_loaded, icon_missing)
+        builder.position_at_end(icon_missing)
+        finish(const(0))
+        builder.position_at_end(icon_loaded)
+        icon_value = builder.ptrtoint(icon, self.int64_type)
+        for icon_size in (1, 0):
+            builder.call(
+                self.send_message_function,
+                [window, const(0x0080), ir.Constant(self.int64_type, icon_size), icon_value],
+            )
+        finish(const(1))
+
+        builder.position_at_end(default_block)
+        finish(const(0))
+
+        builder.position_at_end(exit_block)
+        res = builder.phi(int32, name="window_apply_result")
+        for value, block in incoming:
+            res.add_incoming(value, block)
+        builder.ret(res)
+        return fn
+
+    def emit_interface_operation_function(self, function):
+        int32 = self.int32_type
+        int64 = self.int64_type
+        ptr = self.char_pointer_type
+        null = ir.Constant(ptr, None)
+        parent, request = function.args
+
+        def const(value):
+            return ir.Constant(int32, value)
+
+        def const64(value):
+            return ir.Constant(int64, value)
+
+        set_window_text = self.get_win32_function("SetWindowTextA", int32, [ptr, ptr])
+        get_window_rect = self.get_win32_function("GetWindowRect", int32, [ptr, ptr])
+        enable_window = self.get_win32_function("EnableWindow", int32, [ptr, int32])
+        set_focus = self.get_win32_function("SetFocus", ptr, [ptr])
+        get_long = self.get_win32_function("GetWindowLongPtrA", int64, [ptr, int32])
+        set_long = self.get_win32_function("SetWindowLongPtrA", int64, [ptr, int32, int64])
+        remove_property = self.get_win32_function("RemovePropA", ptr, [ptr, ptr])
+        map_points = self.get_win32_function(
+            "MapWindowPoints", int32, [ptr, ptr, ptr, int32]
+        )
+        order_interfaces = self.emit_interface_layer_ordering_function()
+
+        entry = function.append_basic_block(name="entry")
+        found_block = function.append_basic_block(name="control_found")
+        missing_block = function.append_basic_block(name="control_missing")
+        default_block = function.append_basic_block(name="unsupported_operation")
+        exit_block = function.append_basic_block(name="exit")
+        builder = ir.IRBuilder(entry)
+
+        def field(index, name):
+            return builder.load(
+                builder.gep(request, [const(0), const(index)]),
+                name=name,
+            )
+
+        operation = field(0, "operation")
+        control_id = field(1, "control_id")
+        first = field(2, "argument_a")
+        second = field(3, "argument_b")
+        text = field(4, "argument_text")
+        rect = builder.alloca(ir.ArrayType(int32, 4), name="control_rect")
+        rect_pointer = builder.bitcast(rect, ptr)
+        icon_handles = builder.alloca(ir.ArrayType(int64, 2), name="control_icons")
+        control = builder.call(
+            self.get_dialog_item_function,
+            [parent, control_id],
+            name="control",
+        )
+        builder.cbranch(
+            builder.icmp_unsigned("==", control, null),
+            missing_block,
+            found_block,
+        )
+        builder.position_at_end(missing_block)
+        incoming = [(const(-2), missing_block)]
+        builder.branch(exit_block)
+
+        builder.position_at_end(found_block)
+        switch = builder.switch(operation, default_block)
+
+        def start(code, name):
+            block = function.append_basic_block(name=name)
+            switch.add_case(const(code), block)
+            builder.position_at_end(block)
+            return block
+
+        def finish(value):
+            incoming.append((value, builder.block))
+            builder.branch(exit_block)
+
+        def redraw_parent():
+            builder.call(
+                self.redraw_window_function,
+                [parent, null, null, const(0x0185)],
+            )
+
+        def property_name(name):
+            return self.interned_string(name)
+
+        def encoded(value):
+            return builder.inttoptr(value, ptr)
+
+        start(0, "exists")
+        finish(const(1))
+
+        start(1, "set_text")
+        builder.call(set_window_text, [control, text])
+        redraw_parent()
+        finish(const(1))
+
+        start(2, "set_visible")
+        builder.call(
+            self.show_window_function,
+            [control, builder.select(builder.icmp_signed("!=", first, const(0)), const(5), const(0))],
+        )
+        redraw_parent()
+        finish(const(1))
+
+        start(3, "set_position")
+        builder.call(
+            self.set_window_pos_function,
+            [control, null, first, second, const(0), const(0), const(0x0015)],
+        )
+        redraw_parent()
+        finish(const(1))
+
+        start(4, "set_size")
+        size_apply = function.append_basic_block(name="set_size_apply")
+        size_invalid = function.append_basic_block(name="set_size_invalid")
+        builder.cbranch(
+            builder.and_(
+                builder.icmp_signed(">", first, const(0)),
+                builder.icmp_signed(">", second, const(0)),
+            ),
+            size_apply,
+            size_invalid,
+        )
+        builder.position_at_end(size_invalid)
+        finish(const(0))
+        builder.position_at_end(size_apply)
+        builder.call(
+            self.set_window_pos_function,
+            [control, null, const(0), const(0), first, second, const(0x0016)],
+        )
+        redraw_parent()
+        finish(const(1))
+
+        start(5, "set_layer")
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                property_name("vamp.interface.layer"),
+                encoded(
+                    builder.add(
+                        builder.sext(first, int64),
+                        const64(2147483649),
+                    )
+                ),
+            ],
+        )
+        builder.call(order_interfaces, [parent, control, first])
+        finish(const(1))
+
+        start(6, "set_enabled")
+        builder.call(
+            enable_window,
+            [control, builder.zext(builder.icmp_signed("!=", first, const(0)), int32)],
+        )
+        redraw_parent()
+        finish(const(1))
+
+        start(7, "remove")
+        has_icon = builder.icmp_unsigned(
+            "!=",
+            builder.call(self.get_property_function, [control, property_name("vamp.interface.icon")]),
+            null,
+        )
+        collect_icons = function.append_basic_block(name="remove_collect_icons")
+        no_icons = function.append_basic_block(name="remove_no_icons")
+        destroy_control = function.append_basic_block(name="remove_destroy")
+        for slot in range(2):
+            builder.store(const64(0), builder.gep(icon_handles, [const(0), const(slot)]))
+        builder.cbranch(has_icon, collect_icons, no_icons)
+        builder.position_at_end(collect_icons)
+        for slot, msg, wparam in ((0, 0x00F6, 1), (1, 0x0171, 0)):
+            builder.store(
+                builder.call(
+                    self.send_message_function,
+                    [control, const(msg), const64(wparam), const64(0)],
+                ),
+                builder.gep(icon_handles, [const(0), const(slot)]),
+            )
+        builder.branch(destroy_control)
+        builder.position_at_end(no_icons)
+        builder.branch(destroy_control)
+        builder.position_at_end(destroy_control)
+        old_brush = builder.call(remove_property, [control, property_name("vamp.background.brush")])
+        delete_brush = function.append_basic_block(name="remove_delete_brush")
+        brush_released = function.append_basic_block(name="remove_brush_released")
+        builder.cbranch(builder.icmp_unsigned("!=", old_brush, null), delete_brush, brush_released)
+        builder.position_at_end(delete_brush)
+        builder.call(self.delete_object_function, [old_brush])
+        builder.branch(brush_released)
+        builder.position_at_end(brush_released)
+        for name in (
+            "vamp.interface.layer",
+            "vamp.text.color",
+            "vamp.background.transparent",
+            "vamp.background.color",
+            "vamp.background.opacity",
+            "vamp.interface.icon",
+        ):
+            builder.call(remove_property, [control, property_name(name)])
+        builder.call(self.destroy_window_function, [control])
+        for slot in range(2):
+            fh = builder.load(builder.gep(icon_handles, [const(0), const(slot)]))
+            destroy_icon = function.append_basic_block(name=f"remove_destroy_icon_{slot}")
+            icon_done = function.append_basic_block(name=f"remove_icon_done_{slot}")
+            builder.cbranch(builder.icmp_signed("!=", fh, const64(0)), destroy_icon, icon_done)
+            builder.position_at_end(destroy_icon)
+            builder.call(self.destroy_icon_function, [builder.inttoptr(fh, ptr)])
+            builder.branch(icon_done)
+            builder.position_at_end(icon_done)
+        if self.interface_clicked_global is not None:
+            builder.atomic_rmw(
+                "xchg",
+                builder.gep(self.interface_clicked_global, [const(0), control_id]),
+                const(0),
+                "release",
+            )
+        redraw_parent()
+        finish(const(1))
+
+        start(8, "focus")
+        builder.call(set_focus, [control])
+        finish(const(1))
+
+        start(9, "set_text_color")
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                property_name("vamp.text.color"),
+                encoded(builder.add(builder.zext(first, int64), const64(1))),
+            ],
+        )
+        redraw_parent()
+        finish(const(1))
+
+        start(10, "set_background")
+        color_property = builder.call(
+            self.get_property_function, [control, property_name("vamp.background.color")]
+        )
+        opacity_property = builder.call(
+            self.get_property_function, [control, property_name("vamp.background.opacity")]
+        )
+        transparent_property = builder.call(
+            self.get_property_function, [control, property_name("vamp.background.transparent")]
+        )
+        stored_color = builder.select(
+            builder.icmp_unsigned("!=", color_property, null),
+            builder.trunc(
+                builder.sub(builder.ptrtoint(color_property, int64), const64(1)),
+                int32,
+            ),
+            const(0x00FFFFFF),
+        )
+        color = builder.select(builder.icmp_signed("!=", first, const(-1)), first, stored_color)
+        stored_alpha = builder.select(
+            builder.icmp_unsigned("!=", opacity_property, null),
+            builder.trunc(
+                builder.sub(builder.ptrtoint(opacity_property, int64), const64(1)),
+                int32,
+            ),
+            builder.select(
+                builder.icmp_unsigned("!=", transparent_property, null),
+                const(0),
+                const(255),
+            ),
+        )
+        alpha = builder.select(builder.icmp_signed("!=", second, const(-1)), second, stored_alpha)
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                property_name("vamp.background.color"),
+                encoded(builder.add(builder.zext(color, int64), const64(1))),
+            ],
+        )
+        extended_style = builder.call(get_long, [control, const(-20)])
+        make_transparent = function.append_basic_block(name="background_transparent")
+        make_solid = function.append_basic_block(name="background_solid")
+        apply_style = function.append_basic_block(name="background_apply_style")
+        builder.cbranch(
+            builder.icmp_signed("==", alpha, const(0)),
+            make_transparent,
+            make_solid,
+        )
+
+        builder.position_at_end(make_transparent)
+        released_brush = builder.call(remove_property, [control, property_name("vamp.background.brush")])
+        delete_old = function.append_basic_block(name="background_delete_brush")
+        after_delete = function.append_basic_block(name="background_brush_deleted")
+        builder.cbranch(builder.icmp_unsigned("!=", released_brush, null), delete_old, after_delete)
+        builder.position_at_end(delete_old)
+        builder.call(self.delete_object_function, [released_brush])
+        builder.branch(after_delete)
+        builder.position_at_end(after_delete)
+        builder.call(remove_property, [control, property_name("vamp.background.opacity")])
+        builder.call(
+            self.set_property_function,
+            [control, property_name("vamp.background.transparent"), encoded(const64(1))],
+        )
+        transparent_style = builder.or_(extended_style, const64(0x20))
+        transparent_end = builder.block
+        builder.branch(apply_style)
+
+        builder.position_at_end(make_solid)
+        builder.call(remove_property, [control, property_name("vamp.background.transparent")])
+        new_brush = builder.call(self.create_solid_brush_function, [color])
+        previous_brush = builder.call(
+            self.get_property_function, [control, property_name("vamp.background.brush")]
+        )
+        builder.call(
+            self.set_property_function,
+            [control, property_name("vamp.background.brush"), new_brush],
+        )
+        delete_previous = function.append_basic_block(name="background_delete_previous")
+        brush_swapped = function.append_basic_block(name="background_brush_swapped")
+        builder.cbranch(builder.icmp_unsigned("!=", previous_brush, null), delete_previous, brush_swapped)
+        builder.position_at_end(delete_previous)
+        builder.call(self.delete_object_function, [previous_brush])
+        builder.branch(brush_swapped)
+        builder.position_at_end(brush_swapped)
+        translucent = function.append_basic_block(name="background_translucent")
+        opaque = function.append_basic_block(name="background_opaque")
+        solid_ready = function.append_basic_block(name="background_solid_ready")
+        builder.cbranch(builder.icmp_signed("<", alpha, const(255)), translucent, opaque)
+        builder.position_at_end(translucent)
+        builder.call(
+            self.set_property_function,
+            [
+                control,
+                property_name("vamp.background.opacity"),
+                encoded(builder.add(builder.zext(alpha, int64), const64(1))),
+            ],
+        )
+        builder.branch(solid_ready)
+        builder.position_at_end(opaque)
+        builder.call(remove_property, [control, property_name("vamp.background.opacity")])
+        builder.branch(solid_ready)
+        builder.position_at_end(solid_ready)
+        solid_style = builder.and_(extended_style, const64(~0x20))
+        solid_end = builder.block
+        builder.branch(apply_style)
+
+        builder.position_at_end(apply_style)
+        new_style = builder.phi(int64, name="background_extended_style")
+        new_style.add_incoming(transparent_style, transparent_end)
+        new_style.add_incoming(solid_style, solid_end)
+        builder.call(set_long, [control, const(-20), new_style])
+        builder.call(
+            self.set_window_pos_function,
+            [control, null, const(0), const(0), const(0), const(0), const(0x0037)],
+        )
+        redraw_parent()
+        finish(const(1))
+
+        start(11, "set_icon")
+        icon_ready = function.append_basic_block(name="set_icon_loaded")
+        icon_failed = function.append_basic_block(name="set_icon_failed")
+        icon = builder.call(self.get_window_icon_function(), [text], name="interface_icon")
+        builder.cbranch(builder.icmp_unsigned("!=", icon, null), icon_ready, icon_failed)
+        builder.position_at_end(icon_failed)
+        finish(const(0))
+        builder.position_at_end(icon_ready)
+        control_style = builder.call(get_long, [control, const(-16)])
+        is_static_control = builder.icmp_signed(
+            "==",
+            builder.and_(control_style, const64(0x1F)),
+            const64(3),
+        )
+        previous_icon = builder.call(
+            self.send_message_function,
+            [
+                control,
+                builder.select(is_static_control, const(0x0172), const(0x00F7)),
+                const64(1),
+                builder.ptrtoint(icon, int64),
+            ],
+        )
+        release_previous = function.append_basic_block(name="set_icon_release_previous")
+        icon_swapped = function.append_basic_block(name="set_icon_swapped")
+        builder.cbranch(builder.icmp_signed("!=", previous_icon, const64(0)), release_previous, icon_swapped)
+        builder.position_at_end(release_previous)
+        builder.call(self.destroy_icon_function, [builder.inttoptr(previous_icon, ptr)])
+        builder.branch(icon_swapped)
+        builder.position_at_end(icon_swapped)
+        redraw_parent()
+        finish(const(1))
+
+        start(12, "set_editable")
+        builder.call(
+            self.send_message_function,
+            [
+                control,
+                const(0x00CF),
+                builder.select(builder.icmp_signed("!=", first, const(0)), const64(0), const64(1)),
+                const64(0),
+            ],
+        )
+        finish(const(1))
+
+        start(13, "rectangle")
+        builder.call(get_window_rect, [control, rect_pointer])
+        builder.call(map_points, [null, parent, rect_pointer, const(2)])
+        left, top, right, bottom = [
+            builder.load(builder.gep(rect, [const(0), const(index)]))
+            for index in range(4)
+        ]
+        part = builder.select(
+            builder.icmp_signed("==", first, const(0)),
+            left,
+            builder.select(
+                builder.icmp_signed("==", first, const(1)),
+                top,
+                builder.select(
+                    builder.icmp_signed("==", first, const(2)),
+                    builder.sub(right, left),
+                    builder.sub(bottom, top),
+                ),
+            ),
+        )
+        finish(part)
+
+        start(14, "visible_state")
+        style = builder.call(get_long, [control, const(-16)])
+        finish(
+            builder.zext(
+                builder.icmp_signed(
+                    "!=",
+                    builder.and_(style, const64(0x10000000)),
+                    const64(0),
+                ),
+                int32,
+            )
+        )
+
+        builder.position_at_end(default_block)
+        finish(const(0))
+
+        builder.position_at_end(exit_block)
+        res = builder.phi(int32, name="interface_operation_result")
+        for value, block in incoming:
+            res.add_incoming(value, block)
+        builder.ret(res)
+
+    def get_interface_call_function(self):
+        if self.interface_call_function is not None:
+            return self.interface_call_function
+
+        self.get_window_runtime_functions()
+        int32 = self.int32_type
+        ptr = self.char_pointer_type
+        null = ir.Constant(ptr, None)
+        is_window = self.get_win32_function("IsWindow", int32, [ptr])
+        request_type = self.get_interface_operation_request_type()
+        request_global = ir.GlobalVariable(
+            self.module,
+            request_type,
+            name="vamp_interface_operation_request",
+        )
+        request_global.initializer = ir.Constant(request_type, None)
+        self.interface_operation_request_global = request_global
+
+        fn = ir.Function(
+            self.module,
+            ir.FunctionType(
+                int32,
+                [ptr, ptr, ptr.as_pointer(), int32, int32, int32, int32, ptr],
+            ),
+            name="vamp_interface_call",
+        )
+        fn.linkage = "internal"
+        title, name, cache, control_id, operation, first, second, text = fn.args
+        for arg, argument_name in zip(
+            fn.args,
+            ("title", "name", "cache", "control_id", "operation", "first", "second", "text"),
+        ):
+            arg.name = argument_name
+        entry = fn.append_basic_block(name="entry")
+        validate_block = fn.append_basic_block(name="validate_cached_parent")
+        lookup_block = fn.append_basic_block(name="lookup_parent")
+        missing_parent = fn.append_basic_block(name="missing_parent")
+        send_block = fn.append_basic_block(name="send_operation")
+        missing_control = fn.append_basic_block(name="missing_control")
+        done_block = fn.append_basic_block(name="done")
+        builder = ir.IRBuilder(entry)
+        cached = builder.load(cache, name="cached_parent")
+        builder.cbranch(builder.icmp_unsigned("!=", cached, null), validate_block, lookup_block)
+
+        builder.position_at_end(validate_block)
+        still_valid = builder.icmp_signed("!=", builder.call(is_window, [cached]), ir.Constant(int32, 0))
+        builder.cbranch(still_valid, send_block, lookup_block)
+        validate_end = builder.block
+
+        builder.position_at_end(lookup_block)
+        found = builder.call(self.get_interface_parent_function(), [title], name="found_parent")
+        builder.store(found, cache)
+        builder.cbranch(builder.icmp_unsigned("!=", found, null), send_block, missing_parent)
+        lookup_end = builder.block
+
+        builder.position_at_end(missing_parent)
+        builder.call(
+            self.printf_function,
+            [
+                self.interned_string("Error: interface parent window '%s' was not found\n"),
+                title,
+            ],
+        )
+        builder.ret(ir.Constant(int32, -1))
+
+        builder.position_at_end(send_block)
+        parent = builder.phi(ptr, name="parent_window")
+        parent.add_incoming(cached, validate_end)
+        parent.add_incoming(found, lookup_end)
+        for idx, value in enumerate((operation, control_id, first, second, text)):
+            builder.store(
+                value,
+                builder.gep(
+                    request_global,
+                    [ir.Constant(int32, 0), ir.Constant(int32, idx)],
+                ),
+            )
+        res = builder.trunc(
+            builder.call(
+                self.send_message_function,
+                [
+                    parent,
+                    ir.Constant(int32, 0x8002),
+                    ir.Constant(self.int64_type, 0),
+                    builder.ptrtoint(request_global, self.int64_type),
+                ],
+            ),
+            int32,
+            name="operation_result",
+        )
+        builder.cbranch(
+            builder.icmp_signed("==", res, ir.Constant(int32, -2)),
+            missing_control,
+            done_block,
+        )
+
+        builder.position_at_end(missing_control)
+        builder.call(
+            self.printf_function,
+            [
+                self.interned_string("Error: interface '%s' was not found in window '%s'\n"),
+                name,
+                title,
+            ],
+        )
+        builder.ret(ir.Constant(int32, -1))
+
+        builder.position_at_end(done_block)
+        builder.ret(res)
+        self.interface_call_function = fn
+        return fn
+
+    def get_interface_window_cache(self, window_title):
+        cache = self.interface_window_caches.get(window_title)
+        if cache is None:
+            cache = ir.GlobalVariable(
+                self.module,
+                self.char_pointer_type,
+                name=f"vamp_interface_window_cache.{len(self.interface_window_caches)}",
+            )
+            cache.initializer = ir.Constant(self.char_pointer_type, None)
+            self.interface_window_caches[window_title] = cache
+        return cache
+
+
+    def emit_interface_call(self, node, operation, first=None, second=None, text=None):
+        key = self.get_interface_key(node.arguments[0], node.arguments[1])
+        control_id = self.reserve_interface_id(key)
+        self.interface_operation_used = True
+        call_function = self.get_interface_call_function()
+        int32 = self.int32_type
+        title = self.interned_string(key[0])
+        name = self.interned_string(key[1])
+        return self.builder.call(
+            call_function,
+            [
+                title,
+                name,
+                self.get_interface_window_cache(key[0]),
+                ir.Constant(int32, control_id),
+                ir.Constant(int32, operation),
+                first if first is not None else ir.Constant(int32, 0),
+                second if second is not None else ir.Constant(int32, 0),
+                text if text is not None else ir.Constant(self.char_pointer_type, None),
+            ],
+            name=f"{node.method_name.lower()}_result",
+        )
+
+    def visit_typed_argument(self, node, index, expected_type, description):
+        value, val_ty = self.visit(node.arguments[index])
+        if expected_type == "number":
+            if val_ty == "int":
+                return self.builder.sitofp(value, self.float_type), "float"
+            if val_ty == "float":
+                return value, "float"
+        elif val_ty == expected_type:
+            if expected_type == "bool":
+                return self.builder.zext(value, self.int32_type), "bool"
+            return value, val_ty
+        raise TypeError(f"os.{node.method_name} {description} must be {expected_type}")
+
+    def emit_window_call(self, node, mode, arguments=(), returns="bool"):
+        self.require_argument_count(node, 1 + len(arguments))
+        title, title_type = self.visit(node.arguments[0])
+        if title_type != "str":
+            raise TypeError(f"os.{node.method_name} window title must be str")
+        runtime = self.get_window_runtime_functions()
+        self.window_apply_used = True
+        slots = runtime["arguments"]
+        int_slots = [slots["a"], slots["b"]]
+        for idx, want_ty in enumerate(arguments, start=1):
+            value, _ = self.visit_typed_argument(
+                node,
+                idx,
+                want_ty,
+                "argument",
+            )
+            if want_ty == "str":
+                self.builder.store(value, slots["text"])
+            else:
+                self.builder.store(value, int_slots.pop(0))
+        self.builder.store(ir.Constant(self.int32_type, -1), slots["result"])
+        cnt = self.builder.call(
+            runtime["operation"],
+            [ir.Constant(self.int32_type, mode), title],
+            name=f"{node.method_name.lower()}_count",
+        )
+        found = self.builder.icmp_signed(
+            ">",
+            cnt,
+            ir.Constant(self.int32_type, 0),
+            name=f"{node.method_name.lower()}_found",
+        )
+        if returns == "int":
+            measured = self.builder.load(slots["result"])
+            return self.builder.select(
+                found,
+                measured,
+                ir.Constant(self.int32_type, -1),
+            ), "int"
+        if returns == "state":
+            measured = self.builder.load(slots["result"])
+            return self.builder.and_(
+                found,
+                self.builder.icmp_signed("!=", measured, ir.Constant(self.int32_type, 0)),
+            ), "bool"
+        return found, "bool"
+
+    def opacity_to_alpha(self, value):
+        float_type = self.float_type
+        int32 = self.int32_type
+        scaled = self.builder.fadd(
+            self.builder.fmul(value, ir.Constant(float_type, 255.0)),
+            ir.Constant(float_type, 0.5),
+        )
+        alpha = self.builder.fptosi(scaled, int32)
+        alpha = self.builder.select(
+            self.builder.icmp_signed(">", alpha, ir.Constant(int32, 255)),
+            ir.Constant(int32, 255),
+            alpha,
+        )
+        alpha = self.builder.select(
+            self.builder.icmp_signed("<", alpha, ir.Constant(int32, 0)),
+            ir.Constant(int32, 0),
+            alpha,
+        )
+        positive = self.builder.fcmp_ordered(">", value, ir.Constant(float_type, 0.0))
+        too_small = self.builder.icmp_signed("==", alpha, ir.Constant(int32, 0))
+        return self.builder.select(
+            self.builder.and_(positive, too_small),
+            ir.Constant(int32, 1),
+            alpha,
+        )
+
+    def emit_extended_os_call(self, node):
+        window_methods = {
+            "Set_Window_Title": (4, ("str",), "bool"),
+            "Resize_Window": (5, ("int", "int"), "bool"),
+            "Move_Window": (6, ("int", "int"), "bool"),
+            "Minimize_Window": (7, (), "bool"),
+            "Maximize_Window": (8, (), "bool"),
+            "Restore_Window": (9, (), "bool"),
+            "Focus_Window": (10, (), "bool"),
+            "Get_Window_Width": (11, (), "int"),
+            "Get_Window_Height": (12, (), "int"),
+            "Get_Window_X": (13, (), "int"),
+            "Get_Window_Y": (14, (), "int"),
+            "Window_Minimized": (15, (), "state"),
+            "Window_Maximized": (16, (), "state"),
+            "Set_Window_Icon": (17, ("str",), "bool"),
+        }
+        meth = node.method_name
+        if meth in window_methods:
+            mode, args, returns = window_methods[meth]
+            return self.emit_window_call(node, mode, args, returns)
+
+        zero = ir.Constant(self.int32_type, 0)
+        succeeded = lambda result: (
+            self.builder.icmp_signed(">", result, zero, name=f"{meth.lower()}_succeeded"),
+            "bool",
+        )
+
+        if meth == "Get_Interface":
+            self.require_argument_count(node, 2)
+            return succeeded(self.emit_interface_call(node, 0))
+        if meth == "Set_Interface_Text":
+            self.require_argument_count(node, 3)
+            self.require_interface_capability(node.arguments[0], node.arguments[1], "text")
+            text, _ = self.visit_typed_argument(node, 2, "str", "text")
+            return succeeded(self.emit_interface_call(node, 1, text=text))
+        if meth == "Set_Interface_Visible":
+            self.require_argument_count(node, 3)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            flag, _ = self.visit_typed_argument(node, 2, "bool", "visibility")
+            return succeeded(self.emit_interface_call(node, 2, first=flag))
+        if meth in ("Set_Interface_Position", "Set_Interface_Size"):
+            self.require_argument_count(node, 4)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            first, _ = self.visit_typed_argument(node, 2, "int", "first value")
+            second, _ = self.visit_typed_argument(node, 3, "int", "second value")
+            operation = 3 if meth == "Set_Interface_Position" else 4
+            return succeeded(self.emit_interface_call(node, operation, first, second))
+        if meth == "Set_Interface_Layer":
+            self.require_argument_count(node, 3)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            layer, _ = self.visit_typed_argument(node, 2, "int", "layer")
+            return succeeded(self.emit_interface_call(node, 5, first=layer))
+        if meth == "Set_Interface_Enabled":
+            self.require_argument_count(node, 3)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            flag, _ = self.visit_typed_argument(node, 2, "bool", "enabled state")
+            return succeeded(self.emit_interface_call(node, 6, first=flag))
+        if meth == "Remove_Interface":
+            self.require_argument_count(node, 2)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            removed = self.emit_interface_call(node, 7)
+            self.builder.store(
+                zero,
+                self.get_interface_group_slot(
+                    self.get_interface_key(node.arguments[0], node.arguments[1])
+                ),
+            )
+            return succeeded(removed)
+        if meth == "Focus_Interface":
+            self.require_argument_count(node, 2)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            return succeeded(self.emit_interface_call(node, 8))
+        if meth == "Set_Interface_Text_Color":
+            self.require_argument_count(node, 3)
+            self.require_interface_capability(node.arguments[0], node.arguments[1], "text_color")
+            color = self.parse_interface_color(node.arguments[2], "text_color")
+            return succeeded(
+                self.emit_interface_call(node, 9, ir.Constant(self.int32_type, color))
+            )
+        if meth == "Set_Interface_Background_Color":
+            self.require_argument_count(node, 3)
+            self.require_interface_capability(node.arguments[0], node.arguments[1], "background")
+            color = self.parse_interface_color(node.arguments[2], "background_color")
+            return succeeded(
+                self.emit_interface_call(
+                    node,
+                    10,
+                    ir.Constant(self.int32_type, color),
+                    ir.Constant(self.int32_type, -1),
+                )
+            )
+        if meth == "Set_Interface_Background_Transparency":
+            self.require_argument_count(node, 3)
+            self.require_interface_capability(node.arguments[0], node.arguments[1], "background")
+            arg = node.arguments[2]
+            if isinstance(arg, LiteralNode) and arg.literal_type in ("int", "float"):
+                if not 0.0 <= float(arg.value) <= 1.0:
+                    raise ValueError(
+                        "Interface background transparency must be from 0.0 to 1.0"
+                    )
+            value, _ = self.visit_typed_argument(node, 2, "number", "transparency")
+            return succeeded(
+                self.emit_interface_call(
+                    node,
+                    10,
+                    ir.Constant(self.int32_type, -1),
+                    self.opacity_to_alpha(value),
+                )
+            )
+        if meth == "Set_Interface_Icon":
+            self.require_argument_count(node, 3)
+            self.require_interface_capability(node.arguments[0], node.arguments[1], "icon")
+            path, _ = self.visit_typed_argument(node, 2, "str", "icon path")
+            return succeeded(self.emit_interface_call(node, 11, text=path))
+        if meth == "Set_Interface_Editable":
+            self.require_argument_count(node, 3)
+            self.get_interface_id(node.arguments[0], node.arguments[1], "editable")
+            flag, _ = self.visit_typed_argument(node, 2, "bool", "editable state")
+            return succeeded(self.emit_interface_call(node, 12, first=flag))
+        if meth in ("Get_Interface_X", "Get_Interface_Y", "Get_Interface_Width", "Get_Interface_Height"):
+            self.require_argument_count(node, 2)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            part = ("X", "Y", "Width", "Height").index(meth.rsplit("_", 1)[1])
+            return (
+                self.emit_interface_call(node, 13, ir.Constant(self.int32_type, part)),
+                "int",
+            )
+        if meth == "Interface_Visible":
+            self.require_argument_count(node, 2)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            return succeeded(self.emit_interface_call(node, 14))
+        group_result = self.emit_interface_group_call(node)
+        if group_result is not None:
+            return group_result
+        return None
+
+
+    def get_interface_group(self, window_expression, group_expression, declare=False):
+        if not isinstance(window_expression, LiteralNode) or window_expression.literal_type != "str":
+            raise TypeError("Interface window title must be a string literal")
+        if not isinstance(group_expression, LiteralNode) or group_expression.literal_type != "str":
+            raise TypeError("Interface group name must be a string literal")
+        if not group_expression.value:
+            raise ValueError("Interface group name cannot be empty")
+        key = (window_expression.value, group_expression.value)
+        info = self.interface_groups.get(key)
+        if info is None:
+            info = {"index": len(self.interface_groups) + 1, "declared": False}
+            self.interface_groups[key] = info
+        if declare:
+            info["declared"] = True
+        return info
+
+    def get_interface_group_slot(self, key):
+        slot = self.interface_group_slots.get(key)
+        if slot is None:
+            slot = ir.GlobalVariable(
+                self.module,
+                self.int32_type,
+                name=f"vamp_interface_group_slot.{len(self.interface_group_slots)}",
+            )
+            slot.initializer = ir.Constant(self.int32_type, 0)
+            slot.linkage = "internal"
+            self.interface_group_slots[key] = slot
+        return slot
+
+    def get_interface_group_function(self, window_title):
+        fn = self.interface_group_functions.get(window_title)
+        if fn is None:
+            int32 = self.int32_type
+            fn = ir.Function(
+                self.module,
+                ir.FunctionType(int32, [int32, int32, int32, int32]),
+                name=f"vamp_interface_group_apply.{len(self.interface_group_functions)}",
+            )
+            fn.linkage = "internal"
+            self.interface_group_functions[window_title] = fn
+            self.interface_operation_used = True
+            self.get_interface_call_function()
+        return fn
+
+    def get_interface_group_member_function(self):
+        if self.interface_group_member_function is not None:
+            return self.interface_group_member_function
+        int32 = self.int32_type
+        ptr = self.char_pointer_type
+        call_function = self.get_interface_call_function()
+        fn = ir.Function(
+            self.module,
+            ir.FunctionType(
+                int32,
+                [ptr, ptr, ptr.as_pointer(), int32, int32.as_pointer(), int32, int32, int32, int32],
+            ),
+            name="vamp_interface_group_member",
+        )
+        fn.linkage = "internal"
+        title, name, cache, control_id, slot, group, action, first, second = fn.args
+        zero = ir.Constant(int32, 0)
+        one = ir.Constant(int32, 1)
+        null = ir.Constant(ptr, None)
+        builder = ir.IRBuilder(fn.append_basic_block(name="entry"))
+        switch_block = fn.append_basic_block(name="switch_group")
+        switch_apply_block = fn.append_basic_block(name="switch_apply")
+        member_block = fn.append_basic_block(name="check_member")
+        dispatch_block = fn.append_basic_block(name="dispatch")
+        visible_block = fn.append_basic_block(name="set_visible")
+        enabled_block = fn.append_basic_block(name="set_enabled")
+        move_block = fn.append_basic_block(name="move_by")
+        remove_block = fn.append_basic_block(name="remove")
+        skip_block = fn.append_basic_block(name="skip")
+
+        def call(operation, first_value=zero, second_value=zero):
+            return builder.call(
+                call_function,
+                [title, name, cache, control_id, ir.Constant(int32, operation), first_value, second_value, null],
+            )
+
+        def finish(result):
+            builder.ret(builder.zext(builder.icmp_signed(">", result, zero), int32))
+
+        cur = builder.load(slot, name="current_group")
+        builder.cbranch(builder.icmp_signed("==", action, ir.Constant(int32, 4)), switch_block, member_block)
+
+        builder.position_at_end(switch_block)
+        builder.cbranch(builder.icmp_signed("==", cur, zero), skip_block, switch_apply_block)
+        builder.position_at_end(switch_apply_block)
+        shown = builder.zext(builder.icmp_signed("==", cur, group), int32)
+        switched = call(2, shown)
+        builder.ret(builder.select(builder.icmp_signed(">", switched, zero), shown, zero))
+
+        builder.position_at_end(member_block)
+        builder.cbranch(builder.icmp_signed("==", cur, group), dispatch_block, skip_block)
+
+        builder.position_at_end(dispatch_block)
+        dispatch = builder.switch(action, skip_block)
+        dispatch.add_case(ir.Constant(int32, 0), visible_block)
+        dispatch.add_case(ir.Constant(int32, 1), enabled_block)
+        dispatch.add_case(ir.Constant(int32, 2), move_block)
+        dispatch.add_case(ir.Constant(int32, 3), remove_block)
+
+        builder.position_at_end(visible_block)
+        finish(call(2, first))
+        builder.position_at_end(enabled_block)
+        finish(call(6, first))
+        builder.position_at_end(move_block)
+        left = call(13, zero)
+        top = call(13, one)
+        finish(call(3, builder.add(left, first), builder.add(top, second)))
+        builder.position_at_end(remove_block)
+        removed = call(7)
+        builder.store(zero, slot)
+        finish(removed)
+        builder.position_at_end(skip_block)
+        builder.ret(zero)
+        self.interface_group_member_function = fn
+        return fn
+
+    def finalize_interface_groups(self):
+        undeclared = [key for key, info in self.interface_groups.items() if not info["declared"]]
+        if undeclared:
+            window_title, group_name = undeclared[0]
+            known = [name for (title, name), info in self.interface_groups.items()
+                     if title == window_title and info["declared"]]
+            close = suggest(group_name, known)
+            msg = (
+                f"Interface group '{group_name}' for window '{window_title}' is never created "
+                "and no interface is assigned to it"
+            )
+            if close:
+                msg += f" (did you mean '{close}'?)"
+            raise NameError(msg)
+        int32 = self.int32_type
+        for window_title, fn in self.interface_group_functions.items():
+            group, action, first, second = fn.args
+            builder = ir.IRBuilder(fn.append_basic_block(name="entry"))
+            total = ir.Constant(int32, 0)
+            member_function = self.get_interface_group_member_function()
+            for key, slot in self.interface_group_slots.items():
+                if key[0] != window_title:
+                    continue
+                changed = builder.call(
+                    member_function,
+                    [
+                        self.interned_string(key[0]),
+                        self.interned_string(key[1]),
+                        self.get_interface_window_cache(key[0]),
+                        ir.Constant(int32, self.interface_ids[key]["id"]),
+                        slot,
+                        group,
+                        action,
+                        first,
+                        second,
+                    ],
+                )
+                total = builder.add(total, changed)
+            builder.ret(total)
+
+    def emit_interface_group_call(self, node):
+        meth = node.method_name
+        int32 = self.int32_type
+        zero = ir.Constant(int32, 0)
+
+        if meth == "Make_Interface_Group":
+            self.require_argument_count(node, 2)
+            self.get_interface_group(node.arguments[0], node.arguments[1], declare=True)
+            return ir.Constant(self.bool_type, 1), "bool"
+
+        if meth == "Set_Interface_Group":
+            self.require_argument_count(node, 3)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            key = self.get_interface_key(node.arguments[0], node.arguments[1])
+            group_expression = node.arguments[2]
+            if (
+                isinstance(group_expression, LiteralNode)
+                and group_expression.literal_type == "str"
+                and group_expression.value == ""
+            ):
+                idx = 0
+            else:
+                idx = self.get_interface_group(node.arguments[0], group_expression, declare=True)["index"]
+            slot = self.get_interface_group_slot(key)
+            exists = self.builder.icmp_signed(
+                ">", self.emit_interface_call(node, 0), zero, name="group_member_exists"
+            )
+            self.builder.store(
+                self.builder.select(exists, ir.Constant(int32, idx), self.builder.load(slot)),
+                slot,
+            )
+            return exists, "bool"
+
+        if meth == "Interface_In_Group":
+            self.require_argument_count(node, 3)
+            self.get_interface_id(node.arguments[0], node.arguments[1])
+            key = self.get_interface_key(node.arguments[0], node.arguments[1])
+            info = self.get_interface_group(node.arguments[0], node.arguments[2])
+            cur = self.builder.load(self.get_interface_group_slot(key))
+            return self.builder.icmp_signed("==", cur, ir.Constant(int32, info["index"])), "bool"
+
+        actions = {
+            "Show_Interface_Group": (0, 2),
+            "Hide_Interface_Group": (0, 2),
+            "Set_Interface_Group_Visible": (0, 3),
+            "Set_Interface_Group_Enabled": (1, 3),
+            "Move_Interface_Group": (2, 4),
+            "Remove_Interface_Group": (3, 2),
+            "Switch_Interface_Group": (4, 2),
+        }
+        if meth not in actions:
+            return None
+        action, argument_count = actions[meth]
+        self.require_argument_count(node, argument_count)
+        info = self.get_interface_group(node.arguments[0], node.arguments[1])
+        first = second = zero
+        if meth == "Show_Interface_Group":
+            first = ir.Constant(int32, 1)
+        elif meth in ("Set_Interface_Group_Visible", "Set_Interface_Group_Enabled"):
+            first, _ = self.visit_typed_argument(node, 2, "bool", "state")
+        elif meth == "Move_Interface_Group":
+            first, _ = self.visit_typed_argument(node, 2, "int", "horizontal distance")
+            second, _ = self.visit_typed_argument(node, 3, "int", "vertical distance")
+        changed = self.builder.call(
+            self.get_interface_group_function(node.arguments[0].value),
+            [ir.Constant(int32, info["index"]), ir.Constant(int32, action), first, second],
+            name=f"{meth.lower()}_count",
+        )
+        return changed, "int"
 
     def get_window_operation_function(self):
         return self.get_window_runtime_functions()["operation"]
@@ -2600,7 +3933,11 @@ class LLVMCodeGenerator:
         return fn
 
     def visit_LibraryCallNode(self, node):
-        if node.library_name == "os" and "os" not in self.imported_libraries:
+        if (
+            node.library_name == "os"
+            and not getattr(node, "resolved", False)
+            and "os" not in self.imported_libraries
+        ):
             raise NameError("Library 'os' is not imported. Add 'import os' at top of file.")
 
         if node.library_name == "os":
@@ -2686,13 +4023,15 @@ class LLVMCodeGenerator:
                 resizable = ir.Constant(self.int32_type, 1)
                 window_type = 0
                 icon_path = ir.Constant(self.char_pointer_type, None)
+                ui_style = 1
+                ui_theme = 0
                 if len(node.arguments) == 2:
                     cfg = node.arguments[1]
                     if not isinstance(cfg, WindowConfigNode):
                         raise TypeError(
                             "os.Make_Window configuration must use a window property block"
                         )
-                    supported_properties = {"icon", "size", "resizable", "type"}
+                    supported_properties = {"icon", "size", "resizable", "type", "style", "theme"}
                     unknown_properties = set(cfg.properties) - supported_properties
                     if unknown_properties:
                         unknown = sorted(unknown_properties)[0]
@@ -2741,6 +4080,28 @@ class LLVMCodeGenerator:
                             )
                         window_type = window_types[type_expression.value]
 
+                    style_expression = cfg.properties.get("style")
+                    if style_expression is not None:
+                        ui_style = self.parse_ui_style(style_expression, "Window")
+                    theme_expression = cfg.properties.get("theme")
+                    if theme_expression is not None:
+                        themes = {"light": 0, "dark": 1, "system": 2}
+                        if (
+                            not isinstance(theme_expression, LiteralNode)
+                            or theme_expression.literal_type != "str"
+                            or theme_expression.value not in themes
+                        ):
+                            raise ValueError("Window property 'theme' must be \"light\", \"dark\" or \"system\"")
+                        if ui_style != 2:
+                            raise SyntaxError('Window property \'theme\' needs style = "modern"')
+                        ui_theme = themes[theme_expression.value]
+
+                title_node = node.arguments[0]
+                if isinstance(title_node, LiteralNode) and title_node.literal_type == "str":
+                    self.window_ui_styles[title_node.value] = ui_style
+                elif ui_style != 1:
+                    raise TypeError("A window with a 'style' needs a string literal title")
+
                 runtime = self.get_window_runtime_functions()
                 fn = self.builder.function
                 create_event_block = fn.append_basic_block(name="window_create_event")
@@ -2772,7 +4133,7 @@ class LLVMCodeGenerator:
                         self.int64_type,
                         self.module.data_layout.get_abi_size(runtime["context_type"])
                         if self.module.data_layout
-                        else 48,
+                        else 56,
                     ),
                     name="window_thread_context",
                 )
@@ -2801,6 +4162,8 @@ class LLVMCodeGenerator:
                     (5, ir.Constant(self.int32_type, window_type)),
                     (6, resizable),
                     (7, icon_path),
+                    (8, ir.Constant(self.int32_type, ui_style)),
+                    (9, ir.Constant(self.int32_type, ui_theme)),
                 ):
                     field_pointer = self.builder.gep(
                         context_pointer,
@@ -2897,6 +4260,30 @@ class LLVMCodeGenerator:
 
                 common_properties = {"size", "position", "visible"}
                 common_properties.add("layer")
+                common_properties.add("group")
+                common_properties.update({"style", "corner_radius"})
+                ui_style = self.window_ui_styles.get(window_title_expression.value, 1)
+                if "style" in cfg.properties:
+                    ui_style = self.parse_ui_style(cfg.properties["style"], "Interface")
+                modern = ui_style == 2
+                corner_radius = -1
+                radius_expression = cfg.properties.get("corner_radius")
+                if radius_expression is not None:
+                    if not modern:
+                        raise SyntaxError('Interface property \'corner_radius\' needs style = "modern"')
+                    if (
+                        not isinstance(radius_expression, LiteralNode)
+                        or radius_expression.literal_type != "int"
+                        or radius_expression.value < 0
+                    ):
+                        raise TypeError("Interface property 'corner_radius' must be a whole number of pixels, 0 or more")
+                    corner_radius = radius_expression.value
+                group_expression = cfg.properties.get("group")
+                group_information = None
+                if group_expression is not None:
+                    group_information = self.get_interface_group(
+                        window_title_expression, group_expression, declare=True
+                    )
                 type_properties = {
                     "label": {
                         "text", "text_color", "font", "text_size", "text_transparency",
@@ -3013,7 +4400,7 @@ class LLVMCodeGenerator:
                             raise ValueError("Interface property 'text_transparency' must be from 0.0 to 1.0")
                     text_color = self.blend_color(raw_text_color, system_face, text_opacity)
 
-                background_transparency = 0.0
+                background_transparency = 1.0 if background_color_expression is not None else 0.0
                 if background_transparency_expression is not None:
                     if not isinstance(background_transparency_expression, LiteralNode) or background_transparency_expression.literal_type not in ("float", "int"):
                         raise TypeError("Interface property 'background_transparency' must be a number from 0.0 to 1.0")
@@ -3056,6 +4443,12 @@ class LLVMCodeGenerator:
                     key,
                     interface_type,
                     editable,
+                    styled=(
+                        modern
+                        or background_color_expression is not None
+                        or background_transparency_expression is not None
+                    ),
+                    has_icon=icon_expression is not None,
                 )
                 cls_name = {
                     "label": "EDIT" if editable else "STATIC",
@@ -3121,6 +4514,17 @@ class LLVMCodeGenerator:
                     if editable or background_mode == 2 or background_mode > 2
                     else 0x00000020
                 )
+                if modern:
+                    ex_style = 0
+                    if interface_type == "button":
+                        cls_name = "STATIC"
+                        control_style = 0x44000000 | 0x00010000 | 0x00000100
+                        if icon_expression is not None:
+                            control_style |= 0x00000003
+                            icon_kind = 2
+                    if icon_expression is not None:
+                        control_style |= 0x00000040
+                ui_kind = {"label": 1 if editable else 0, "button": 2, "frame": 3, "icon": 4}[interface_type]
                 interface_request_type = self.get_interface_request_type()
                 interface_request = self.builder.alloca(
                     interface_request_type,
@@ -3149,6 +4553,9 @@ class LLVMCodeGenerator:
                     icon_path_value,
                     ir.Constant(self.int32_type, icon_kind),
                     ir.Constant(self.int32_type, -1),
+                    ir.Constant(self.int32_type, ui_style),
+                    ir.Constant(self.int32_type, ui_kind),
+                    ir.Constant(self.int32_type, corner_radius),
                 ]
                 for field_index, field_value in enumerate(request_values):
                     field_pointer = self.builder.gep(
@@ -3302,6 +4709,16 @@ class LLVMCodeGenerator:
                 )
                 res.add_incoming(ir.Constant(self.bool_type, 0), failure_predecessor)
                 res.add_incoming(ir.Constant(self.bool_type, 1), success_predecessor)
+                if group_information is not None:
+                    group_slot = self.get_interface_group_slot(key)
+                    self.builder.store(
+                        self.builder.select(
+                            res,
+                            ir.Constant(self.int32_type, group_information["index"]),
+                            self.builder.load(group_slot),
+                        ),
+                        group_slot,
+                    )
                 return res, "bool"
             if node.method_name == "Interface_Clicked":
                 self.require_argument_count(node, 2)
@@ -3345,8 +4762,8 @@ class LLVMCodeGenerator:
                 window_title = self.visit_LiteralNode(LiteralNode("str", key[0]))[0]
                 self.emit_interface_message_pump()
                 parent_window = self.builder.call(
-                    self.find_window_function,
-                    [ir.Constant(self.char_pointer_type, None), window_title],
+                    self.get_interface_parent_function(),
+                    [window_title],
                     name="interface_text_parent",
                 )
                 control_window = self.builder.call(
@@ -3503,6 +4920,10 @@ class LLVMCodeGenerator:
                 )
                 return succeeded, "bool"
 
+            extended_result = self.emit_extended_os_call(node)
+            if extended_result is not None:
+                return extended_result
+
         raise NotImplementedError(f"Method '{node.library_name}.{node.method_name}' is not implemented.")
 
     def require_argument_count(self, node, expected_count):
@@ -3530,6 +4951,9 @@ class LLVMCodeGenerator:
                     self.char_pointer_type,
                     self.int32_type,
                     self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
+                    self.int32_type,
                 ]
             )
         return self.interface_request_type
@@ -3547,10 +4971,13 @@ class LLVMCodeGenerator:
             "editable": False,
             "declared": False,
             "requested_types": [],
+            "requested_capabilities": [],
+            "styled": False,
+            "has_icon": False,
         }
         return self.interface_id_count
 
-    def register_interface(self, key, interface_type, editable=False):
+    def register_interface(self, key, interface_type, editable=False, styled=False, has_icon=False):
         control_id = self.reserve_interface_id(key)
         existing = self.interface_ids.get(key)
         if existing is not None and existing["declared"]:
@@ -3569,6 +4996,9 @@ class LLVMCodeGenerator:
                         f"Interface '{key[1]}' must be a {want_ty}, "
                         f"not a {interface_type}"
                     )
+        requested_capabilities = (
+            existing.get("requested_capabilities", []) if existing is not None else []
+        )
         self.interface_ids[key] = {
             "id": control_id,
             "type": interface_type,
@@ -3577,7 +5007,44 @@ class LLVMCodeGenerator:
             "requested_types": (
                 existing.get("requested_types", []) if existing is not None else []
             ),
+            "requested_capabilities": requested_capabilities,
+            "styled": styled,
+            "has_icon": has_icon,
         }
+        for capability in requested_capabilities:
+            self.check_interface_capability(key, self.interface_ids[key], capability)
+        return control_id
+
+    def check_interface_capability(self, key, information, capability):
+        interface_type = information["type"]
+        name = key[1]
+        if capability == "text" and interface_type not in ("label", "button"):
+            raise TypeError(f"Interface '{name}' is a {interface_type} and has no text")
+        if capability == "text_color":
+            if interface_type not in ("label", "button"):
+                raise TypeError(f"Interface '{name}' is a {interface_type} and has no text color")
+            if interface_type == "button" and not information["styled"]:
+                raise TypeError(
+                    f"Button '{name}' must be created with a background property to change its colors"
+                )
+        if capability == "background" and interface_type == "button" and not information["styled"]:
+            raise TypeError(
+                f"Button '{name}' must be created with a background property to change its background"
+            )
+        if capability == "icon":
+            if interface_type not in ("button", "icon"):
+                raise TypeError(f"Interface '{name}' is a {interface_type} and has no icon")
+            if interface_type == "button" and not information["has_icon"]:
+                raise TypeError(f"Button '{name}' must be created with an icon to change its icon")
+
+    def require_interface_capability(self, window_expression, name_expression, capability):
+        key = self.get_interface_key(window_expression, name_expression)
+        control_id = self.reserve_interface_id(key)
+        info = self.interface_ids[key]
+        if capability not in info["requested_capabilities"]:
+            info["requested_capabilities"].append(capability)
+        if info["declared"]:
+            self.check_interface_capability(key, info, capability)
         return control_id
 
     def get_interface_id(self, window_expression, name_expression, expected_type=None):
@@ -3732,7 +5199,43 @@ class LLVMCodeGenerator:
             candidate_process_id,
             current_process_id,
         )
-        callback_builder.cbranch(is_own_process, title_block, continue_block)
+        key_check_block = callback.append_basic_block(name="check_key")
+        key_compare_block = callback.append_basic_block(name="compare_key")
+        callback_builder.cbranch(is_own_process, key_check_block, continue_block)
+
+        callback_builder.position_at_end(key_check_block)
+        window_key = callback_builder.call(
+            self.get_property_function,
+            [callback.args[0], self.interned_string("vamp.window.key")],
+        )
+        callback_builder.cbranch(
+            callback_builder.icmp_unsigned(
+                "!=",
+                window_key,
+                ir.Constant(self.char_pointer_type, None),
+            ),
+            key_compare_block,
+            title_block,
+        )
+
+        callback_builder.position_at_end(key_compare_block)
+        key_wanted_pointer = callback_builder.gep(
+            ctx,
+            [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, 0)],
+        )
+        key_matches = callback_builder.call(
+            self.compare_case_insensitive_function,
+            [window_key, callback_builder.load(key_wanted_pointer)],
+        )
+        callback_builder.cbranch(
+            callback_builder.icmp_signed(
+                "==",
+                key_matches,
+                ir.Constant(self.int32_type, 0),
+            ),
+            found_block,
+            title_block,
+        )
 
         callback_builder.position_at_end(title_block)
         title_buffer_type = ir.ArrayType(self.int32_type, 128)
@@ -3817,6 +5320,8 @@ class LLVMCodeGenerator:
         return fn
 
     def emit_interface_layer_ordering_function(self):
+        if self.interface_order_function is not None:
+            return self.interface_order_function
         helper_type = ir.FunctionType(
             ir.VoidType(),
             [
@@ -3950,6 +5455,7 @@ class LLVMCodeGenerator:
             ],
         )
         builder.ret_void()
+        self.interface_order_function = helper
         return helper
 
     def emit_interface_creation_function(self, function):
@@ -4261,6 +5767,15 @@ class LLVMCodeGenerator:
         builder.branch(show_control)
 
         builder.position_at_end(show_control)
+        builder.call(
+            self.runtime_function(
+                "vamp_ui_style_control",
+                ir.VoidType(),
+                [self.char_pointer_type, self.int32_type, self.int32_type, self.int32_type],
+            ),
+            [control, load_field(19, "interface_ui_style"), load_field(20, "interface_ui_kind"),
+             load_field(21, "interface_corner_radius")],
+        )
         is_visible = builder.icmp_signed(
             "!=",
             visible,
@@ -4719,809 +6234,9 @@ class LLVMCodeGenerator:
         res.add_incoming(listing_result, close_predecessor)
         return res, "int"
 
-    def visit_LiteralNode(self, node):
-        if node.literal_type == "int":
-            return ir.Constant(self.int32_type, node.value), "int"
-        elif node.literal_type == "float":
-            return ir.Constant(self.float_type, node.value), "float"
-        elif node.literal_type == "bool":
-            return ir.Constant(self.bool_type, 1 if node.value else 0), "bool"
-        elif node.literal_type == "str":
-            string_content = node.value + "\0"
-            string_constant = ir.Constant(ir.ArrayType(ir.IntType(8), len(string_content)), bytearray(string_content.encode("utf-8")))
-            self.string_literal_count += 1
-            string_global = ir.GlobalVariable(self.module, string_constant.type, name=f".str_{self.string_literal_count}")
-            string_global.linkage = "internal"
-            string_global.initializer = string_constant
-            return self.builder.bitcast(string_global, self.char_pointer_type), "str"
 
-    def visit_ArrayLiteralNode(self, node):
-        if not node.elements:
-            raise TypeError("Arrays must contain at least one element so their type can be inferred")
-
-        elems = []
-        elem_ty = None
-        for expr in node.elements:
-            value, val_ty = self.visit(expr)
-            if elem_ty is None:
-                elem_ty = val_ty
-            elif val_ty != elem_ty:
-                raise TypeError("Array elements must all have the same type")
-            elems.append(value)
-
-        return ArrayLiteralValue(elems, elem_ty), "array"
-
-    def visit_DictionaryLiteralNode(self, node):
-        if not node.entries:
-            raise TypeError("Dictionaries must contain at least one typed field")
-
-        entries = []
-        seen_keys = set()
-        for key, decl_ty, expr in node.entries:
-            if key in seen_keys:
-                raise SyntaxError(f"Duplicate dictionary field '{key}'")
-            seen_keys.add(key)
-            value, val_ty = self.visit(expr)
-            if val_ty != decl_ty:
-                raise TypeError(f"Dictionary field '{key}' expects {decl_ty}, got {val_ty}")
-            entries.append((key, decl_ty, value))
-
-        return DictionaryLiteralValue(entries), "dictionary"
-
-    def visit_VariableAccessNode(self, node):
-        variable_type = self.type_information[node.variable_name]
-        if (
-            variable_type in ("array", "dictionary")
-            or variable_type.startswith("class:")
-        ):
-            raise TypeError(f"Use an index or field to read '{node.variable_name}'")
-        variable_pointer = self.variable_pointers[node.variable_name]
-        value = self.builder.load(variable_pointer, name=f"{node.variable_name}_value")
-        return value, variable_type
-
-    def get_array_element_pointer(self, array, index_expression):
-        if not isinstance(array, VariableAccessNode):
-            raise TypeError("Indexed access requires an array or pointer variable")
-        array_name = array.variable_name
-        variable_type = self.type_information.get(array_name)
-        idx, index_type = self.visit(index_expression)
-        if index_type != "int":
-            raise TypeError("Indexes must be int")
-
-        if variable_type and variable_type.startswith("pointer:"):
-            elem_ty = variable_type.removeprefix("pointer:")
-            ptr = self.builder.load(
-                self.variable_pointers[array_name],
-                name=f"{array_name}_pointer_value",
-            )
-            return self.builder.gep(
-                ptr,
-                [idx],
-                name=f"{array_name}_element_pointer",
-            ), elem_ty
-
-        if variable_type != "array":
-            raise TypeError(f"'{array_name}' is not an array or pointer")
-        array_info = self.array_information[array_name]
-        return self.builder.gep(
-            self.variable_pointers[array_name],
-            [ir.Constant(self.int32_type, 0), idx],
-            name=f"{array_name}_element_pointer",
-        ), array_info["element_type"]
-
-    def visit_ArrayAccessNode(self, node):
-        element_pointer, elem_ty = self.get_array_element_pointer(
-            node.array,
-            node.index,
-        )
-        return self.builder.load(element_pointer, name="indexed_element"), elem_ty
-
-    def visit_ArrayAssignmentNode(self, node):
-        element_pointer, elem_ty = self.get_array_element_pointer(
-            node.array,
-            node.index,
-        )
-        value, val_ty = self.visit(node.expression)
-        if node.operator != "=":
-            if elem_ty != val_ty:
-                raise TypeError(
-                    f"Indexed assignment type mismatch: {elem_ty} and {val_ty}"
-                )
-            current_value = self.builder.load(element_pointer, name="indexed_current_value")
-            operator = node.operator[0]
-            if elem_ty == "int":
-                operations = {
-                    "+": self.builder.add,
-                    "-": self.builder.sub,
-                    "*": self.builder.mul,
-                    "/": self.builder.sdiv,
-                }
-            elif elem_ty == "float":
-                operations = {
-                    "+": self.builder.fadd,
-                    "-": self.builder.fsub,
-                    "*": self.builder.fmul,
-                    "/": self.builder.fdiv,
-                }
-            else:
-                raise TypeError(
-                    f"Compound indexed assignment is not supported for {elem_ty}"
-                )
-            value = operations[operator](current_value, value, name="indexed_assignment")
-        if val_ty != elem_ty:
-            raise TypeError(
-                f"Indexed assignment expects {elem_ty}, got {val_ty}"
-            )
-        self.builder.store(value, element_pointer)
-
-    def visit_DictionaryAccessNode(self, node):
-        if not isinstance(node.dictionary, VariableAccessNode):
-            raise TypeError("Field access requires a variable")
-        var_name = node.dictionary.variable_name
-        variable_type = self.type_information.get(var_name)
-        if variable_type == "dictionary":
-            field_information = self.dictionary_information[var_name].get(node.key)
-            if field_information is None:
-                raise NameError(f"Dictionary has no field '{node.key}'")
-            field_index, field_ty = field_information
-            aggregate_pointer = self.variable_pointers[var_name]
-        elif variable_type and variable_type.startswith("class:"):
-            cls_name = variable_type.removeprefix("class:")
-            class_definition = self.class_definitions[cls_name]
-            field_information = class_definition["fields"].get(node.key)
-            if field_information is None:
-                raise NameError(f"Class '{cls_name}' has no field '{node.key}'")
-            field_index, field_ty, _ = field_information
-            aggregate_pointer = self.variable_pointers[var_name]
-        else:
-            raise TypeError(f"'{var_name}' does not have readable fields")
-
-        field_pointer = self.builder.gep(
-            aggregate_pointer,
-            [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
-            name=f"{var_name}_{node.key}_pointer",
-        )
-        return self.builder.load(field_pointer, name=f"{var_name}_{node.key}"), field_ty
-
-    def visit_MethodCallNode(self, node):
-        if not isinstance(node.receiver, VariableAccessNode):
-            raise TypeError("Class method calls need an instance variable as the receiver")
-
-        receiver_name = node.receiver.variable_name
-        receiver_type = self.type_information.get(receiver_name)
-        if not receiver_type or not receiver_type.startswith("class:"):
-            raise TypeError(f"'{receiver_name}' is not a class instance")
-
-        cls_name = receiver_type.removeprefix("class:")
-        class_definition = self.class_definitions[cls_name]
-        nested_class_name = class_definition["nested_classes"].get(node.method_name)
-        if nested_class_name is not None:
-            return self.create_class_instance(nested_class_name, node.arguments)
-
-        method_information = self.class_methods.get((cls_name, node.method_name))
-        if method_information is None:
-            raise NameError(f"Class '{cls_name}' has no method or nested class '{node.method_name}'")
-
-        params = method_information["parameters"]
-        if len(node.arguments) != len(params):
-            raise TypeError(
-                f"Method '{cls_name}.{node.method_name}' expects {len(params)} "
-                f"arguments, got {len(node.arguments)}"
-            )
-
-        argument_values = [self.variable_pointers[receiver_name]]
-        for arg, (parameter_name, parameter_type) in zip(node.arguments, params):
-            value, val_ty = self.visit(arg)
-            if val_ty != parameter_type:
-                raise TypeError(
-                    f"Method argument '{parameter_name}' expects {parameter_type}, got {val_ty}"
-                )
-            argument_values.append(value)
-
-        res = self.builder.call(
-            method_information["function"],
-            argument_values,
-            name=f"{receiver_name}_{node.method_name}_result",
-        )
-        return res, method_information["return_type"]
-
-    def visit_ForLoopNode(self, node):
-        if isinstance(node.iterable, DictionaryAccessNode) and node.iterable.key == "values":
-            if not isinstance(node.iterable.dictionary, VariableAccessNode):
-                raise TypeError("Dictionary value loops require a dictionary variable")
-            dictionary_name = node.iterable.dictionary.variable_name
-            fields = self.dictionary_information.get(dictionary_name)
-            if fields is None:
-                raise TypeError(f"'{dictionary_name}' is not a dictionary")
-            self.emit_dictionary_value_loop(dictionary_name, node.item_name, node.body)
-            return
-
-        if isinstance(node.iterable, VariableAccessNode):
-            collection_name = node.iterable.variable_name
-            collection_type = self.type_information.get(collection_name)
-            if collection_type == "array":
-                array_info = self.array_information[collection_name]
-                self.emit_array_loop(
-                    self.variable_pointers[collection_name],
-                    array_info["element_type"],
-                    array_info["length"],
-                    node.item_name,
-                    node.body,
-                )
-                return
-            if collection_type == "dictionary":
-                field_names = list(self.dictionary_information[collection_name])
-                self.emit_dictionary_key_loop(field_names, node.item_name, node.body)
-                return
-
-        iterable_value, iterable_type = self.visit(node.iterable)
-        if isinstance(iterable_value, ArrayLiteralValue):
-            array_pointer = self.materialize_array(iterable_value, f"{node.item_name}_array")
-            self.emit_array_loop(
-                array_pointer,
-                iterable_value.element_type,
-                len(iterable_value.elements),
-                node.item_name,
-                node.body,
-            )
-            return
-        if isinstance(iterable_value, DictionaryLiteralValue):
-            field_names = [field_name for field_name, _, _ in iterable_value.entries]
-            self.emit_dictionary_key_loop(field_names, node.item_name, node.body)
-            return
-        raise TypeError(f"For loops cannot iterate over values of type '{iterable_type}'")
-
-    def visit_WhileLoopNode(self, node):
-        fn = self.builder.function
-        condition_block = fn.append_basic_block(name="while_condition")
-        body_block = fn.append_basic_block(name="while_body")
-        end_block = fn.append_basic_block(name="while_end")
-        self.builder.branch(condition_block)
-
-        self.builder.position_at_end(condition_block)
-        condition_value, condition_type = self.visit(node.condition)
-        if condition_type != "bool":
-            raise TypeError(f"while condition must be bool, got {condition_type}")
-        self.builder.cbranch(condition_value, body_block, end_block)
-
-        self.builder.position_at_end(body_block)
-        visible_variable_pointers = self.variable_pointers.copy()
-        visible_type_information = self.type_information.copy()
-        visible_array_information = self.array_information.copy()
-        visible_dictionary_information = self.dictionary_information.copy()
-        visible_constant_variables = self.constant_variables.copy()
-        for stmt in node.body:
-            self.visit(stmt)
-        if not self.builder.block.is_terminated:
-            self.builder.branch(condition_block)
-
-        self.variable_pointers = visible_variable_pointers
-        self.type_information = visible_type_information
-        self.array_information = visible_array_information
-        self.dictionary_information = visible_dictionary_information
-        self.constant_variables = visible_constant_variables
-        self.builder.position_at_end(end_block)
-
-    def emit_dictionary_value_loop(self, dictionary_name, item_name, body):
-        dictionary_pointer = self.variable_pointers[dictionary_name]
-        saved_variable_pointers = self.variable_pointers.copy()
-        saved_type_information = self.type_information.copy()
-        saved_array_information = self.array_information.copy()
-        saved_dictionary_information = self.dictionary_information.copy()
-        saved_constant_variables = self.constant_variables.copy()
-
-        for field_name, (field_index, field_ty) in self.dictionary_information[dictionary_name].items():
-            field_pointer = self.builder.gep(
-                dictionary_pointer,
-                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
-                name=f"{dictionary_name}_{field_name}_value_pointer",
-            )
-            self.variable_pointers[item_name] = field_pointer
-            self.type_information[item_name] = field_ty
-            self.array_information.pop(item_name, None)
-            self.dictionary_information.pop(item_name, None)
-
-            for stmt in body:
-                self.visit(stmt)
-            if self.builder.block.is_terminated:
-                break
-
-            self.variable_pointers = saved_variable_pointers.copy()
-            self.type_information = saved_type_information.copy()
-            self.array_information = saved_array_information.copy()
-            self.dictionary_information = saved_dictionary_information.copy()
-            self.constant_variables = saved_constant_variables.copy()
-
-        self.variable_pointers = saved_variable_pointers
-        self.type_information = saved_type_information
-        self.array_information = saved_array_information
-        self.dictionary_information = saved_dictionary_information
-        self.constant_variables = saved_constant_variables
-
-    def materialize_array(self, array_value, array_name):
-        array_type = ir.ArrayType(self.llvm_type_for(array_value.element_type), len(array_value.elements))
-        array_pointer = self.builder.alloca(array_type, name=array_name)
-        for idx, elem in enumerate(array_value.elements):
-            element_pointer = self.builder.gep(
-                array_pointer,
-                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, idx)],
-            )
-            self.builder.store(elem, element_pointer)
-        return array_pointer
-
-    def emit_dictionary_key_loop(self, field_names, item_name, body):
-        key_values = [self.visit_LiteralNode(LiteralNode("str", field_name))[0] for field_name in field_names]
-        key_array = ArrayLiteralValue(key_values, "str")
-        key_pointer = self.materialize_array(key_array, f"{item_name}_keys")
-        self.emit_array_loop(key_pointer, "str", len(field_names), item_name, body)
-
-    def emit_array_loop(self, array_pointer, element_type, array_length, item_name, body):
-
-        fn = self.builder.function
-        preheader_block = self.builder.block
-        condition_block = fn.append_basic_block(name="for_condition")
-        body_block = fn.append_basic_block(name="for_body")
-        end_block = fn.append_basic_block(name="for_end")
-        self.builder.branch(condition_block)
-
-        self.builder.position_at_end(condition_block)
-        item_index = self.builder.phi(self.int32_type, name="for_index")
-        item_index.add_incoming(ir.Constant(self.int32_type, 0), preheader_block)
-        has_next_item = self.builder.icmp_signed(
-            "<", item_index, ir.Constant(self.int32_type, array_length), name="for_has_item"
-        )
-        self.builder.cbranch(has_next_item, body_block, end_block)
-
-        self.builder.position_at_end(body_block)
-        item_pointer = self.builder.gep(
-            array_pointer,
-            [ir.Constant(self.int32_type, 0), item_index],
-            name=f"{item_name}_pointer",
-        )
-        saved_variable_pointers = self.variable_pointers.copy()
-        saved_type_information = self.type_information.copy()
-        saved_array_information = self.array_information.copy()
-        saved_dictionary_information = self.dictionary_information.copy()
-        saved_constant_variables = self.constant_variables.copy()
-        self.variable_pointers[item_name] = item_pointer
-        self.type_information[item_name] = element_type
-        self.array_information.pop(item_name, None)
-        self.dictionary_information.pop(item_name, None)
-
-        for stmt in body:
-            self.visit(stmt)
-
-        if not self.builder.block.is_terminated:
-            loop_end_block = self.builder.block
-            next_item_index = self.builder.add(item_index, ir.Constant(self.int32_type, 1), name="for_next_index")
-            self.builder.branch(condition_block)
-            item_index.add_incoming(next_item_index, loop_end_block)
-
-        self.variable_pointers = saved_variable_pointers
-        self.type_information = saved_type_information
-        self.array_information = saved_array_information
-        self.dictionary_information = saved_dictionary_information
-        self.constant_variables = saved_constant_variables
-        self.builder.position_at_end(end_block)
-
-    def visit_BinaryOpNode(self, node):
-        lhs, lhs_ty = self.visit(node.left)
-        rhs, rhs_ty = self.visit(node.right)
-
-        if lhs_ty == "str" or rhs_ty == "str":
-            if lhs_ty != "str":
-                lhs, _ = self.visit_CastNode(type("Cast", (), {"expression": node.left, "target_type": "str"})())
-            if rhs_ty != "str":
-                rhs, _ = self.visit_CastNode(type("Cast", (), {"expression": node.right, "target_type": "str"})())
-
-            left_length = self.builder.call(self.strlen_function, [lhs])
-            right_length = self.builder.call(self.strlen_function, [rhs])
-            buffer_length = self.builder.add(self.builder.add(left_length, right_length), ir.Constant(self.int32_type, 1))
-
-            buf = self.allocate_bytes(buffer_length, name="string_concat_buffer")
-            self.builder.call(self.strcpy_function, [buf, lhs])
-            self.builder.call(self.strcat_function, [buf, rhs])
-            return buf, "str"
-
-        if lhs_ty != rhs_ty:
-            raise TypeError(f"Type mismatch: {lhs_ty} {node.operator} {rhs_ty}")
-
-        if lhs_ty == "int":
-            if node.operator == "+": return self.builder.add(lhs, rhs, name="addtmp"), "int"
-            elif node.operator == "-": return self.builder.sub(lhs, rhs, name="subtmp"), "int"
-            elif node.operator == "*": return self.builder.mul(lhs, rhs, name="multmp"), "int"
-            elif node.operator == "/": return self.builder.sdiv(lhs, rhs, name="divtmp"), "int"
-        elif lhs_ty == "float":
-            if node.operator == "+": return self.builder.fadd(lhs, rhs, name="faddtmp"), "float"
-            elif node.operator == "-": return self.builder.fsub(lhs, rhs, name="fsubtmp"), "float"
-            elif node.operator == "*": return self.builder.fmul(lhs, rhs, name="fmultmp"), "float"
-            elif node.operator == "/": return self.builder.fdiv(lhs, rhs, name="fdivtmp"), "float"
-
-        raise SyntaxError(f"Unsupported binary operator '{node.operator}' for type '{lhs_ty}'")
-
-    def visit_ComparisonNode(self, node):
-        lhs, lhs_ty = self.visit(node.left)
-        rhs, rhs_ty = self.visit(node.right)
-
-        if lhs_ty != rhs_ty:
-            raise TypeError(f"Cannot compare {lhs_ty} with {rhs_ty}")
-
-        if lhs_ty == "float":
-            if node.operator == "!=":
-                return self.builder.fcmp_unordered(node.operator, lhs, rhs), "bool"
-            return self.builder.fcmp_ordered(node.operator, lhs, rhs), "bool"
-
-        if lhs_ty == "str":
-            comparison = self.builder.call(self.strcmp_function, [lhs, rhs])
-            return self.builder.icmp_signed(node.operator, comparison, ir.Constant(self.int32_type, 0)), "bool"
-
-        if lhs_ty == "bool" and node.operator not in ("==", "!="):
-            raise SyntaxError("Boolean values only support == and != comparisons")
-        if lhs_ty in ("int", "bool"):
-            return self.builder.icmp_signed(node.operator, lhs, rhs), "bool"
-
-        raise SyntaxError(f"Values of type '{lhs_ty}' cannot be compared")
-
-    def visit_IfNode(self, node):
-        fn = self.builder.function
-        merge_block = fn.append_basic_block(name="if_end")
-        visible_variable_pointers = self.variable_pointers.copy()
-        visible_type_information = self.type_information.copy()
-        visible_array_information = self.array_information.copy()
-        visible_dictionary_information = self.dictionary_information.copy()
-        visible_constant_variables = self.constant_variables.copy()
-
-        for cond, body in node.branches:
-            condition_value, condition_type = self.visit(cond)
-            if condition_type != "bool":
-                raise TypeError(f"if condition must be bool, got {condition_type}")
-
-            body_block = fn.append_basic_block(name="if_body")
-            next_branch_block = fn.append_basic_block(name="if_next")
-            self.builder.cbranch(condition_value, body_block, next_branch_block)
-
-            self.builder.position_at_end(body_block)
-            for stmt in body:
-                self.visit(stmt)
-            if not self.builder.block.is_terminated:
-                self.builder.branch(merge_block)
-
-            self.variable_pointers = visible_variable_pointers.copy()
-            self.type_information = visible_type_information.copy()
-            self.array_information = visible_array_information.copy()
-            self.dictionary_information = visible_dictionary_information.copy()
-            self.constant_variables = visible_constant_variables.copy()
-            self.builder.position_at_end(next_branch_block)
-
-        if node.else_body is not None:
-            for stmt in node.else_body:
-                self.visit(stmt)
-        if not self.builder.block.is_terminated:
-            self.builder.branch(merge_block)
-
-        self.variable_pointers = visible_variable_pointers
-        self.type_information = visible_type_information
-        self.array_information = visible_array_information
-        self.dictionary_information = visible_dictionary_information
-        self.constant_variables = visible_constant_variables
-        self.builder.position_at_end(merge_block)
-
-    def visit_CastNode(self, node):
-        value, val_ty = self.visit(node.expression)
-        tgt_ty = node.target_type
-
-        if val_ty == tgt_ty:
-            return value, tgt_ty
-
-        if tgt_ty == "int":
-            if val_ty == "float":
-                return self.builder.fptosi(value, self.int32_type, name="cast_int"), "int"
-            elif val_ty == "bool":
-                return self.builder.zext(value, self.int32_type, name="cast_int"), "int"
-            elif val_ty == "str":
-                return self.builder.call(self.atoi_function, [value], name="atoi_tmp"), "int"
-
-        elif tgt_ty == "float":
-            if val_ty == "int":
-                return self.builder.sitofp(value, self.float_type, name="cast_float"), "float"
-            elif val_ty == "bool":
-                integer_value = self.builder.zext(value, self.int32_type, name="bool_int")
-                return self.builder.sitofp(integer_value, self.float_type, name="cast_float"), "float"
-            elif val_ty == "str":
-                double_value = self.builder.call(self.atof_function, [value], name="atof_tmp")
-                return self.builder.fptrunc(double_value, self.float_type, name="fptrunc_tmp"), "float"
-
-        elif tgt_ty == "bool":
-            if val_ty == "int":
-                return self.builder.icmp_signed("!=", value, ir.Constant(self.int32_type, 0), name="cast_bool"), "bool"
-            elif val_ty == "float":
-                return self.builder.fcmp_ordered("!=", value, ir.Constant(self.float_type, 0.0), name="cast_bool"), "bool"
-            elif val_ty == "str":
-                true_string = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
-                one_string = self.visit_LiteralNode(LiteralNode("str", "1"))[0]
-                true_comparison = self.builder.call(self.strcmp_function, [value, true_string])
-                one_comparison = self.builder.call(self.strcmp_function, [value, one_string])
-                is_true = self.builder.icmp_signed("==", true_comparison, ir.Constant(self.int32_type, 0))
-                is_one = self.builder.icmp_signed("==", one_comparison, ir.Constant(self.int32_type, 0))
-                return self.builder.or_(is_true, is_one, name="cast_bool"), "bool"
-
-        elif tgt_ty == "str":
-            buf = self.allocate_bytes(
-                ir.Constant(self.int32_type, 64),
-                name="string_buffer",
-            )
-            buffer_size = ir.Constant(self.int32_type, 64)
-            if val_ty == "int":
-                format_string = self.visit_LiteralNode(LiteralNode("str", "%d"))[0]
-                self.builder.call(self.snprintf_function, [buf, buffer_size, format_string, value])
-                return buf, "str"
-            elif val_ty == "float":
-                format_string = self.visit_LiteralNode(LiteralNode("str", "%f"))[0]
-                double_value = self.builder.fpext(value, ir.DoubleType())
-                self.builder.call(self.snprintf_function, [buf, buffer_size, format_string, double_value])
-                return buf, "str"
-            elif val_ty == "bool":
-                true_string = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
-                false_string = self.visit_LiteralNode(LiteralNode("str", "false"))[0]
-                return self.builder.select(value, true_string, false_string), "str"
-
-        raise TypeError(f"Casting from {val_ty} to {tgt_ty} is not supported.")
-
-    def visit_VariableDeclarationNode(self, node):
-        value, val_ty = self.visit(node.initializer)
-        if node.variable_type is not None and val_ty != node.variable_type:
-            raise TypeError(f"Cannot assign {val_ty} to variable '{node.variable_name}' of type {node.variable_type}")
-
-        if node.is_constant:
-            self.constant_variables.add(node.variable_name)
-        else:
-            self.constant_variables.discard(node.variable_name)
-
-        if isinstance(value, ClassInstanceValue):
-            self.variable_pointers[node.variable_name] = value.pointer
-            self.type_information[node.variable_name] = val_ty
-            self.array_information.pop(node.variable_name, None)
-            self.dictionary_information.pop(node.variable_name, None)
-            return
-
-        if isinstance(value, ArrayLiteralValue):
-            array_type = ir.ArrayType(self.llvm_type_for(value.element_type), len(value.elements))
-            variable_pointer = self.builder.alloca(array_type, name=node.variable_name)
-            for idx, elem in enumerate(value.elements):
-                element_pointer = self.builder.gep(
-                    variable_pointer,
-                    [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, idx)],
-                )
-                self.builder.store(elem, element_pointer)
-            self.variable_pointers[node.variable_name] = variable_pointer
-            self.type_information[node.variable_name] = "array"
-            self.array_information[node.variable_name] = {
-                "element_type": value.element_type,
-                "length": len(value.elements),
-            }
-            self.dictionary_information.pop(node.variable_name, None)
-            return
-
-        if isinstance(value, DictionaryLiteralValue):
-            dictionary_type = ir.LiteralStructType([
-                self.llvm_type_for(field_ty)
-                for _, field_ty, _ in value.entries
-            ])
-            variable_pointer = self.builder.alloca(dictionary_type, name=node.variable_name)
-            fields = {}
-            for field_index, (field_name, field_ty, field_value) in enumerate(value.entries):
-                field_pointer = self.builder.gep(
-                    variable_pointer,
-                    [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
-                )
-                self.builder.store(field_value, field_pointer)
-                fields[field_name] = (field_index, field_ty)
-            self.variable_pointers[node.variable_name] = variable_pointer
-            self.type_information[node.variable_name] = "dictionary"
-            self.dictionary_information[node.variable_name] = fields
-            self.array_information.pop(node.variable_name, None)
-            return
-
-        variable_type = node.variable_type or val_ty
-        if isinstance(value, PointerValue):
-            value = value.pointer
-        variable_pointer = self.builder.alloca(self.llvm_type_for(variable_type), name=node.variable_name)
-        self.builder.store(value, variable_pointer)
-        self.variable_pointers[node.variable_name] = variable_pointer
-        self.type_information[node.variable_name] = variable_type
-        self.array_information.pop(node.variable_name, None)
-        self.dictionary_information.pop(node.variable_name, None)
-
-    def visit_GroupVariableDeclarationNode(self, node):
-        if node.variable_type is None:
-            raise SyntaxError("Grouped declarations require an explicit type")
-        if len(set(node.variable_names)) != len(node.variable_names):
-            raise SyntaxError("Grouped declarations cannot contain duplicate variable names")
-        if node.initializers is not None and len(node.initializers) != len(node.variable_names):
-            raise SyntaxError(
-                f"Grouped declaration has {len(node.variable_names)} variables but "
-                f"{len(node.initializers)} initializers"
-            )
-
-        if node.initializers is None:
-            defaults = {
-                "int": LiteralNode("int", 0),
-                "float": LiteralNode("float", 0.0),
-                "bool": LiteralNode("bool", False),
-                "str": LiteralNode("str", ""),
-            }
-            initializer = defaults.get(node.variable_type)
-            if initializer is None:
-                raise TypeError(
-                    f"Grouped declarations do not support default initialization "
-                    f"for {node.variable_type}"
-                )
-            initializers = [initializer] * len(node.variable_names)
-        else:
-            initializers = node.initializers
-
-        for var_name, initializer in zip(node.variable_names, initializers):
-            self.visit(
-                VariableDeclarationNode(
-                    node.is_constant,
-                    var_name,
-                    node.variable_type,
-                    initializer,
-                )
-            )
-
-    def visit_PrintNode(self, node):
-        value, val_ty = self.visit(node.expression)
-        end = "\n\0" if node.newline else "\0"
-        format_string = f"%s{end}" if val_ty == "str" else f"%d{end}" if val_ty == "int" else f"%f{end}" if val_ty == "float" else f"%s{end}"
-
-        format_constant = ir.Constant(ir.ArrayType(ir.IntType(8), len(format_string)), bytearray(format_string.encode("utf-8")))
-        self.string_literal_count += 1
-        format_global = ir.GlobalVariable(self.module, format_constant.type, name=f".str_{self.string_literal_count}")
-        format_global.linkage = "internal"
-        format_global.initializer = format_constant
-        format_pointer = self.builder.bitcast(format_global, self.char_pointer_type)
-
-        if val_ty == "float":
-            value = self.builder.fpext(value, ir.DoubleType())
-        elif val_ty == "bool":
-            true_string = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
-            false_string = self.visit_LiteralNode(LiteralNode("str", "false"))[0]
-            value = self.builder.select(value, true_string, false_string)
-
-        self.builder.call(self.printf_function, [format_pointer, value])
-
-    def visit_ExitNode(self, node):
-        exit_code, exit_code_type = self.visit(node.exit_code)
-        if exit_code_type != "int":
-            raise TypeError(f"exit() expected int exit code, got {exit_code_type}")
-        self.builder.call(self.exit_function, [exit_code])
-
-    def visit_FreeNode(self, node):
-        ptr, pointer_type = self.visit(node.pointer_expression)
-        if pointer_type != "str" and not pointer_type.startswith("pointer:"):
-            raise TypeError(f"free() expected an allocated pointer, got {pointer_type}")
-        if isinstance(ptr, PointerValue):
-            ptr = ptr.pointer
-        if ptr.type != self.char_pointer_type:
-            ptr = self.builder.bitcast(ptr, self.char_pointer_type, name="free_pointer")
-        self.builder.call(self.free_function, [ptr])
-        
-    def llvm_type_for(self, type_name):
-        if type_name == "int": return self.int32_type
-        elif type_name == "float": return self.float_type
-        elif type_name == "bool": return self.bool_type
-        elif type_name == "str": return self.char_pointer_type
-        elif type_name.startswith("pointer:"):
-            return self.llvm_type_for(type_name.removeprefix("pointer:")).as_pointer()
-        elif type_name == "void": return ir.VoidType()
-        elif type_name.startswith("class:"):
-            cls_name = type_name.removeprefix("class:")
-            return self.class_definitions[cls_name]["llvm_type"]
-        return self.int32_type
-
-    def visit_FunctionDeclarationNode(self, node):
-        previous_builder = self.builder
-        previous_variable_pointers = self.variable_pointers.copy()
-        previous_type_information = self.type_information.copy()
-        previous_array_information = self.array_information.copy()
-        previous_dictionary_information = self.dictionary_information.copy()
-        previous_constant_variables = self.constant_variables.copy()
-
-        parameter_types = [self.llvm_type_for(parameter_type) for _, parameter_type in node.parameters]
-        return_llvm_type = self.llvm_type_for(node.return_type)
-
-        function_type = ir.FunctionType(return_llvm_type, parameter_types)
-        fn = ir.Function(self.module, function_type, name=node.function_name)
-        fn.attributes.add("noinline")
-        
-        self.type_information[f"function_{node.function_name}"] = node.return_type
-
-        entry_block = fn.append_basic_block(name="entry")
-        self.builder = ir.IRBuilder(entry_block)
-
-        for idx, (parameter_name, parameter_type) in enumerate(node.parameters):
-            parameter_llvm_type = self.llvm_type_for(parameter_type)
-            parameter_pointer = self.builder.alloca(parameter_llvm_type, name=parameter_name)
-            self.builder.store(fn.args[idx], parameter_pointer)
-            self.variable_pointers[parameter_name] = parameter_pointer
-            self.type_information[parameter_name] = parameter_type
-
-        for stmt in node.body:
-            self.visit(stmt)
-
-        if not self.builder.block.is_terminated:
-            if isinstance(return_llvm_type, ir.VoidType):
-                raise SyntaxError(
-                    f"Function '{node.function_name}' must end with 'return : void'"
-                )
-            raise SyntaxError(f"Function '{node.function_name}' must return a value")
-
-        self.builder = previous_builder
-        self.variable_pointers = previous_variable_pointers
-        self.type_information = previous_type_information
-        self.array_information = previous_array_information
-        self.dictionary_information = previous_dictionary_information
-        self.constant_variables = previous_constant_variables
-        self.type_information[f"function_{node.function_name}"] = node.return_type
-
-    def visit_ReturnNode(self, node):
-        function_return_type = self.builder.function.function_type.return_type
-        if node.return_type == "void" or node.expression is None:
-            if not isinstance(function_return_type, ir.VoidType):
-                raise TypeError("A void return can only be used in a void function or method")
-            self.builder.ret_void()
-            return None, "void"
-
-        value, val_ty = self.visit(node.expression)
-        if node.return_type is not None and val_ty != node.return_type:
-            raise TypeError(f"Return annotation expects {node.return_type}, got {val_ty}")
-        if value.type != function_return_type:
-            raise TypeError(f"Return value of type {val_ty} does not match the function return type")
-        self.builder.ret(value)
-
-    def visit_FunctionCallNode(self, node):
-        if node.function_name in self.class_definitions:
-            return self.create_class_instance(node.function_name, node.arguments)
-
-        fn = self.module.get_global(node.function_name)
-        argument_values = []
-        for arg in node.arguments:
-            value, _ = self.visit(arg)
-            argument_values.append(value)
-
-        ret_ty = self.type_information.get(f"function_{node.function_name}", "int")
-        res = self.builder.call(fn, argument_values, name=f"{node.function_name}_result")
-        return res, ret_ty
-
-    def create_class_instance(self, class_name, arguments, instance_name=None):
-        class_definition = self.class_definitions.get(class_name)
-        if class_definition is None:
-            raise NameError(f"Class '{class_name}' is not declared")
-
-        field_order = class_definition["field_order"]
-        if len(arguments) != len(field_order):
-            raise TypeError(
-                f"Class '{class_name}' expects {len(field_order)} values, got {len(arguments)}"
-            )
-
-        instance_pointer = self.builder.alloca(
-            class_definition["llvm_type"],
-            name=instance_name or f"{class_name.lower()}_instance",
-        )
-        for field_index, (field_name, arg) in enumerate(zip(field_order, arguments)):
-            value, val_ty = self.visit(arg)
-            _, want_ty, _ = class_definition["fields"][field_name]
-            if val_ty != want_ty:
-                raise TypeError(
-                    f"Field '{field_name}' in class '{class_name}' expects "
-                    f"{want_ty}, got {val_ty}"
-                )
-            field_pointer = self.builder.gep(
-                instance_pointer,
-                [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
-                name=f"{field_name}_pointer",
-            )
-            self.builder.store(value, field_pointer)
-
-        return ClassInstanceValue(instance_pointer), f"class:{class_name}"
+# mixin order = override order, leftmost wins
+class LLVMCodeGenerator(StandardLibrary, LanguageCore, OsCodeGenerator):
+    def __init__(self):
+        super().__init__()
+        self.init_language_state()

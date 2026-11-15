@@ -1,4 +1,7 @@
-Compiler/test.vp
-Compiler/test.exe
-Compiler/__pycache__/
+__pycache__/
+build/
 Compiler/build/
+Compiler/test.vp
+*.exe
+!Compiler/dist/vamp.exe
+*.manifest
