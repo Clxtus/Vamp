@@ -1,5 +1,12 @@
 <p align="center"><img src="vamp-vscode/icons/icon.png" width="96" alt="Vamp logo"></p>
 
+<p align="center">
+  <a href="https://github.com/Clxtus/Vamp/releases/latest"><img src="https://img.shields.io/github/v/release/Clxtus/Vamp?color=7d0000&label=release" alt="Release"></a>
+  <a href="https://github.com/Clxtus/Vamp/releases"><img src="https://img.shields.io/github/downloads/Clxtus/Vamp/total?color=2ea44f" alt="Downloads"></a>
+  <a href="https://github.com/Clxtus/Vamp/releases/latest"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078d6" alt="Platform"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Clxtus/Vamp?color=blue" alt="License"></a>
+</p>
+
 # Vamp
 
 Vamp is a compiled programming language for Windows. Programs build into small native `.exe` files through LLVM and run at C/C++ speed, while the language takes care of memory with a garbage collector.
