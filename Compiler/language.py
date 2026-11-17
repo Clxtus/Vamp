@@ -3,7 +3,8 @@ from llvmlite import ir
 from diagnostics import suggest
 from parser import (
     ArrayAccessNode, ArrayLiteralNode, ClassDeclarationNode, DictionaryAccessNode,
-    EnumDeclarationNode, FunctionCallNode, FunctionDeclarationNode, LiteralNode, MapLiteralNode,
+    EnumDeclarationNode, FunctionCallNode, FunctionDeclarationNode, InterfaceDeclarationNode, LiteralNode,
+    MapLiteralNode,
     VariableAccessNode,
 )
 from values import ArrayLiteralValue, ClassInstanceValue, DictionaryLiteralValue, PointerValue
@@ -34,7 +35,28 @@ STRING_METHODS = {
     "repeat": ("vamp_str_repeat", ("int",), "str"),
     "char_at": ("vamp_str_at", ("int",), "char"),
     "is_number": ("vamp_str_is_number", (), "bool"),
+    "chars": ("vamp_str_chars", (), "list:str"),
+    "char_count": ("vamp_str_char_count", (), "int"),
+    "code_points": ("vamp_str_code_points", (), "list:int"),
 }
+
+
+def split_type_list(text):
+    parts = []
+    depth = 0
+    cur = []
+    for ch in text:
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    return parts
 
 
 def describe_type(type_name):
@@ -42,12 +64,29 @@ def describe_type(type_name):
         return "unknown"
     if type_name.startswith("list:"):
         return f"list[{describe_type(type_name[5:])}]"
+    if type_name.startswith("set:"):
+        return f"set[{describe_type(type_name[4:])}]"
+    if type_name.startswith("tuple["):
+        return "(" + ", ".join(describe_type(item) for item in split_type_list(type_name[6:-1])) + ")"
+    if type_name.startswith("fn["):
+        inner = type_name[3:-1]
+        depth = 0
+        for pos, ch in enumerate(inner):
+            depth += {"[": 1, "]": -1}.get(ch, 0)
+            if ch == ";" and depth == 0:
+                params, res = inner[:pos], inner[pos + 1:]
+        shown = ", ".join(describe_type(item) for item in split_type_list(params)) if params else ""
+        return f"func({shown})" + ("" if res == "void" else f" : {describe_type(res)}")
     if type_name.startswith("map:"):
         _, key_ty, val_ty = type_name.split(":", 2)
         return f"map[{key_ty}, {describe_type(val_ty)}]"
     if type_name.startswith("pointer:"):
         return f"pointer to {describe_type(type_name[8:])}"
-    for prefix in ("class:", "enum:", "named:"):
+    if type_name.startswith("optional:"):
+        return describe_type(type_name[9:]) + "?"
+    if type_name == "none":
+        return "none"
+    for prefix in ("class:", "enum:", "named:", "interface:"):
         if type_name.startswith(prefix):
             return type_name[len(prefix):]
     return type_name
@@ -60,6 +99,8 @@ def is_number_literal(node):
 class LanguageCore:
     def init_language_state(self):
         self.enum_definitions = {}
+        self.interface_definitions = {}
+        self.interface_tables = {}
         self.enum_name_functions = {}
         self.function_overloads = {}
         self.declared_function_order = []
@@ -87,8 +128,14 @@ class LanguageCore:
         for stmt in program:
             if isinstance(stmt, EnumDeclarationNode):
                 self.register_enum(stmt)
+            elif isinstance(stmt, InterfaceDeclarationNode):
+                self.register_interface_type(stmt)
+        self.init_generics()
         for stmt in program:
-            if isinstance(stmt, ClassDeclarationNode):
+            if isinstance(stmt, (ClassDeclarationNode, FunctionDeclarationNode)) and self.is_generic(stmt):
+                self.register_generic(stmt)
+        for stmt in program:
+            if isinstance(stmt, ClassDeclarationNode) and not self.is_generic(stmt):
                 if stmt.class_name in self.pending_classes or stmt.class_name in self.enum_definitions:
                     raise SyntaxError(f"Class '{stmt.class_name}' is already declared")
                 self.pending_classes[stmt.class_name] = stmt
@@ -97,19 +144,26 @@ class LanguageCore:
             self.ensure_class_registered(cls_name)
         for stmt in self.top_level_classes:
             self.declare_class_methods(stmt)
+        self.build_vtables()
         for stmt in program:
-            if isinstance(stmt, FunctionDeclarationNode):
+            if isinstance(stmt, FunctionDeclarationNode) and not self.is_generic(stmt):
                 self.declare_function(stmt)
 
     def finish_program(self):
         main_builder = self.builder
         main_block = self.builder.block
         main_state = (self.function_allocas, self.function_has_try)
-        for info in list(self.declared_function_order):
-            if not info["emitted"]:
-                self.emit_function_body(info)
-        for decl in self.top_level_classes:
-            self.emit_class_methods(decl)
+        changed = True
+        while changed:
+            changed = False
+            for info in list(self.declared_function_order):
+                if not info["emitted"]:
+                    self.emit_function_body(info)
+                    changed = True
+            for decl in list(self.top_level_classes) + list(self.generic_class_instances):
+                emitted = len(self.emitted_class_methods)
+                self.emit_class_methods(decl)
+                changed = changed or len(self.emitted_class_methods) != emitted
         self.builder = main_builder
         self.function_allocas, self.function_has_try = main_state
         if self.function_has_try:
@@ -125,7 +179,8 @@ class LanguageCore:
     # vamp_start is its own tiny unit so hello world doesn't pull in the GC
     RUNTIME_UNIT_PREFIXES = (
         ("vamp_json_", "json"), ("vamp_thread_", "thread"), ("vamp_net_", "net"),
-        ("vamp_input_", "media"), ("vamp_audio_", "media"), ("vamp_ui_", "ui"),
+        ("vamp_input_", "media"), ("vamp_audio_", "media"), ("vamp_ui_", "ui"), ("vamp_os_", "system"),
+        ("vamp_gc_", "gc"), ("vamp_regex_", "regex"), ("vamp_start", "start"),
     )
 
     def runtime_function(self, name, return_type, parameter_types):
@@ -137,8 +192,7 @@ class LanguageCore:
             for prefix, prefix_unit in self.RUNTIME_UNIT_PREFIXES:
                 if name.startswith(prefix):
                     unit = prefix_unit
-            self.runtime_units.add("core")
-            self.runtime_units.add(unit)
+            self.runtime_units.update((unit,) if unit == "start" else ("core", "gc", unit))
         return fn
 
     def c_type_for(self, type_name):
@@ -208,15 +262,31 @@ class LanguageCore:
             return None
         if type_name.startswith("list:"):
             return "list:" + self.resolve_type(type_name[5:])
+        if type_name.startswith("set:"):
+            return "set:" + self.resolve_type(type_name[4:])
+        if type_name.startswith("tuple["):
+            return "tuple[" + ",".join(self.resolve_type(item) for item in split_type_list(type_name[6:-1])) + "]"
+        if type_name.startswith("fn["):
+            params, res = self.function_signature(type_name)
+            return self.make_function_type([self.resolve_type(item) for item in params], self.resolve_type(res))
         if type_name.startswith("map:"):
             _, key_ty, val_ty = type_name.split(":", 2)
             return f"map:{key_ty}:{self.resolve_type(val_ty)}"
         if type_name.startswith("pointer:"):
             return "pointer:" + self.resolve_type(type_name[8:])
+        if type_name.startswith("optional:"):
+            inner = self.resolve_type(type_name[9:])
+            return inner if inner.startswith("optional:") else "optional:" + inner
         if type_name.startswith("named:"):
             name = type_name[6:]
-            if name in self.pending_classes:
+            if name in self.interface_definitions:
+                return f"interface:{name}"
+            if name == "builder" and name not in self.pending_classes:
+                return "builder"
+            if name in self.pending_classes and not self.is_reference_class(name):
                 self.ensure_class_registered(name)
+            elif name in self.pending_classes:
+                return f"class:{name}"
             if name in self.class_definitions:
                 return f"class:{name}"
             if name in self.enum_definitions:
@@ -240,8 +310,10 @@ class LanguageCore:
             return self.bool_type
         if type_name == "char":
             return self.int8_type
-        if type_name in ("str", "json") or type_name.startswith(("list:", "map:")):
+        if type_name in ("str", "json", "builder") or type_name.startswith(("list:", "map:", "set:", "fn[")):
             return self.char_pointer_type
+        if type_name.startswith("tuple["):
+            return ir.LiteralStructType([self.llvm_type_for(item) for item in split_type_list(type_name[6:-1])])
         if type_name == "void":
             return ir.VoidType()
         if type_name.startswith("enum:"):
@@ -249,7 +321,14 @@ class LanguageCore:
         if type_name.startswith("pointer:"):
             return self.llvm_type_for(type_name[8:]).as_pointer()
         if type_name.startswith("class:"):
-            return self.class_definitions[type_name[6:]]["llvm_type"]
+            name = type_name[6:]
+            if self.is_reference_class(name):
+                return self.class_object_type(name).as_pointer()
+            return self.class_definitions[name]["llvm_type"]
+        if type_name.startswith("interface:"):
+            return self.interface_llvm_type()
+        if type_name.startswith("optional:"):
+            return self.optional_llvm_type(type_name[9:])
         raise TypeError(f"Values of type '{describe_type(type_name)}' cannot be stored")
 
     def size_of(self, type_name):
@@ -259,13 +338,15 @@ class LanguageCore:
 
     def as_value(self, value):
         if isinstance(value, ClassInstanceValue):
-            return self.builder.load(value.pointer)
+            return value.pointer if value.reference else self.builder.load(value.pointer)
         if isinstance(value, PointerValue):
             return value.pointer
         return value
 
     def wrap_value(self, value, value_type):
         if value_type.startswith("class:") and not isinstance(value, ClassInstanceValue):
+            if self.is_reference_class(value_type[6:]):
+                return ClassInstanceValue(value, reference=True)
             storage = self.entry_alloca(self.llvm_type_for(value_type), "class_value")
             self.builder.store(value, storage)
             return ClassInstanceValue(storage, temporary=True)
@@ -273,6 +354,8 @@ class LanguageCore:
 
     def load_typed(self, pointer, value_type):
         if value_type.startswith("class:"):
+            if self.is_reference_class(value_type[6:]):
+                return ClassInstanceValue(self.builder.load(pointer), reference=True), value_type
             return ClassInstanceValue(pointer), value_type
         return self.builder.load(pointer), value_type
 
@@ -294,9 +377,17 @@ class LanguageCore:
                     return ir.Constant(self.float_type, node.value), "f32"
             if isinstance(node, ArrayLiteralNode) and target_type.startswith("list:"):
                 return self.build_list_literal(node, target_type)
+            expected = self.expected_literal(node, target_type)
+            if expected is not None:
+                return expected
             if isinstance(node, MapLiteralNode) and target_type.startswith("map:"):
                 return self.build_map_literal(node, target_type)
-        return self.visit(node)
+        value, val_ty = self.visit(node)
+        if target_type is not None and val_ty != target_type:
+            converted = self.convert_value(value, val_ty, target_type)
+            if converted is not None:
+                return converted
+        return value, val_ty
 
     def default_value(self, type_name):
         type_name = self.resolve_type(type_name)
@@ -306,6 +397,14 @@ class LanguageCore:
             return self.new_list(type_name[5:], 4), type_name
         if type_name.startswith("map:"):
             return self.new_map(type_name), type_name
+        if type_name.startswith("set:"):
+            return self.build_set([], type_name)
+        if type_name.startswith("optional:"):
+            return self.none_value(type_name[9:]), type_name
+        if type_name.startswith("class:") and self.is_reference_class(type_name[6:]):
+            raise TypeError(
+                f"A variable of class {describe_type(type_name)} needs an object, or make its type "
+                f"{describe_type(type_name)}? so it can start as none")
         if type_name.startswith("class:"):
             storage = self.entry_alloca(self.llvm_type_for(type_name), "default_value")
             self.builder.store(ir.Constant(self.llvm_type_for(type_name), None), storage)
@@ -394,6 +493,11 @@ class LanguageCore:
             self.bind_variable(name, ptr, "dictionary", is_constant)
             self.dictionary_information[name] = fields
             return
+        if isinstance(value, ClassInstanceValue) and value.reference:
+            ptr = self.allocate_variable(self.llvm_type_for(value_type), name)
+            self.builder.store(value.pointer, ptr)
+            self.bind_variable(name, ptr, value_type, is_constant)
+            return
         if isinstance(value, ClassInstanceValue):
             if value.temporary and not self.at_global_scope():
                 ptr = value.pointer
@@ -419,6 +523,8 @@ class LanguageCore:
         self.declare_variable(node.variable_name, value, val_ty, node.is_constant)
 
     def visit_GroupVariableDeclarationNode(self, node):
+        if node.initializers is not None and len(node.initializers) == 1 and len(node.variable_names) > 1:
+            return self.declare_unpacked(node)
         if node.variable_type is None:
             raise SyntaxError("Grouped declarations require an explicit type")
         if len(set(node.variable_names)) != len(node.variable_names):
@@ -447,24 +553,6 @@ class LanguageCore:
             raise TypeError(f"'{node.instance_name}' must be initialized with a class instance")
         self.declare_variable(node.instance_name, value, val_ty)
 
-    def class_field_pointer(self, instance_pointer, class_name, field_name):
-        defn = self.class_definitions[class_name]
-        field = defn["fields"].get(field_name)
-        if field is None:
-            close = suggest(field_name, defn["fields"])
-            msg = f"Class '{class_name}' has no field '{field_name}'"
-            if close:
-                msg += f" (did you mean '{close}'?)"
-            raise NameError(msg)
-        field_index, field_ty, is_constant = field
-        if instance_pointer.type.pointee != defn["llvm_type"]:
-            instance_pointer = self.builder.bitcast(instance_pointer, defn["llvm_type"].as_pointer())
-        ptr = self.builder.gep(
-            instance_pointer, [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
-            name=f"{field_name}_pointer",
-        )
-        return ptr, field_ty, is_constant
-
     def lvalue_pointer(self, node, for_write=True):
         if isinstance(node, VariableAccessNode):
             name = node.variable_name
@@ -484,9 +572,14 @@ class LanguageCore:
                 )
                 return ptr, field[1], base.variable_name in self.constant_variables, f"field '{node.key}'"
             base_pointer, base_ty, base_constant, _ = self.lvalue_pointer(base, for_write)
+            if base_ty.startswith("optional:class:") and self.is_reference_class(base_ty[15:]):
+                base_ty = base_ty[9:]
             if not base_ty.startswith("class:"):
                 raise TypeError(f"Values of type {describe_type(base_ty)} do not have fields")
-            if base_pointer.type.pointee == self.char_pointer_type or not isinstance(
+            if self.is_reference_class(base_ty[6:]):
+                base_pointer = self.builder.load(base_pointer)
+                base_constant = False
+            elif base_pointer.type.pointee == self.char_pointer_type or not isinstance(
                     base_pointer.type.pointee, (ir.LiteralStructType, ir.BaseStructType)):
                 raise TypeError(f"Values of type {describe_type(base_ty)} do not have fields")
             ptr, field_ty, field_constant = self.class_field_pointer(base_pointer, base_ty[6:], node.key)
@@ -573,6 +666,8 @@ class LanguageCore:
         self.assign_to(node.target, node.operator, node.expression)
 
     def visit_LiteralNode(self, node):
+        if node.literal_type == "none":
+            return None, "none"
         if node.literal_type == "int":
             low, high = INTEGER_RANGES["int"]
             if not low <= node.value <= high:
@@ -641,7 +736,7 @@ class LanguageCore:
             raise TypeError(f"Use an index or field to read '{node.variable_name}'")
         ptr = self.variable_pointers[node.variable_name]
         if variable_type.startswith("class:"):
-            return ClassInstanceValue(ptr), variable_type
+            return self.load_typed(ptr, variable_type)
         return self.builder.load(ptr, name=f"{node.variable_name}_value"), variable_type
 
     def visit_ArrayAccessNode(self, node):
@@ -652,6 +747,8 @@ class LanguageCore:
         )
         if not is_storage and not isinstance(target, (ArrayLiteralNode, MapLiteralNode)):
             value, val_ty = self.visit(target)
+            if val_ty.startswith("tuple["):
+                return self.tuple_element(value, val_ty, node.index)
             if val_ty == "str":
                 return self.call_runtime("vamp_str_at", ("str", "i32"), "char", [value, self.visit_index(node.index)])
             if val_ty.startswith("list:"):
@@ -692,9 +789,14 @@ class LanguageCore:
                     name=f"{name}_{node.key}_pointer",
                 )
                 return self.load_typed(ptr, field[1])
-            if not variable_type.startswith("class:"):
+            if not variable_type.startswith(("class:", "optional:class:")):
                 raise TypeError(f"'{name}' does not have readable fields")
         value, val_ty = self.visit(base)
+        if val_ty.startswith("optional:class:"):
+            if self.is_reference_class(val_ty[15:]):
+                value, val_ty = ClassInstanceValue(self.as_value(value), reference=True), val_ty[9:]
+            else:
+                value, val_ty = self.unwrap_optional(value, val_ty, f"read field '{node.key}' of none")
         if not isinstance(value, ClassInstanceValue):
             raise TypeError(f"Values of type {describe_type(val_ty)} do not have fields")
         ptr, field_ty, _ = self.class_field_pointer(value.pointer, val_ty[6:], node.key)
@@ -721,19 +823,16 @@ class LanguageCore:
         return self.apply_binary(node.operator, lhs, lhs_ty, rhs, rhs_ty)
 
     def apply_binary(self, operator, left_value, left_type, right_value, right_type):
+        if left_type.startswith("class:"):
+            return self.operator_method(operator, left_value, left_type, right_value, right_type)
         if operator == "+" and (left_type == "str" or right_type == "str"):
             if left_type != "str":
                 left_value, _ = self.cast_value(left_value, left_type, "str")
             if right_type != "str":
                 right_value, _ = self.cast_value(right_value, right_type, "str")
-            left_length = self.builder.call(self.strlen_function, [left_value])
-            right_length = self.builder.call(self.strlen_function, [right_value])
-            buffer_length = self.builder.add(
-                self.builder.add(left_length, right_length), ir.Constant(self.int32_type, 1))
-            buf = self.allocate_bytes(buffer_length, name="string_concat_buffer")
-            self.builder.call(self.strcpy_function, [buf, left_value])
-            self.builder.call(self.strcat_function, [buf, right_value])
-            return buf, "str"
+            concat = self.runtime_function(
+                "vamp_str_concat2", self.char_pointer_type, [self.char_pointer_type, self.char_pointer_type])
+            return self.builder.call(concat, [left_value, right_value], name="joined"), "str"
 
         if left_type != right_type:
             raise TypeError(f"Type mismatch: {describe_type(left_type)} {operator} {describe_type(right_type)}")
@@ -748,6 +847,8 @@ class LanguageCore:
                 "&": builder.and_, "|": builder.or_, "^": builder.xor,
                 "<<": builder.shl, ">>": builder.lshr if unsigned else builder.ashr,
             }
+            if operator in ("/", "%"):
+                return self.checked_division(operator, left_value, right_value, unsigned), left_type
             if operator in operations:
                 return operations[operator](left_value, right_value), left_type
         elif left_type in FLOAT_TYPES:
@@ -761,8 +862,36 @@ class LanguageCore:
                 return operations[operator](left_value, right_value), "bool"
         raise SyntaxError(f"Unsupported binary operator '{operator}' for type '{describe_type(left_type)}'")
 
+    # x / 0 and INT_MIN / -1 both trap on x86, so check first. const divisors skip it
+    def checked_division(self, operator, left, right, unsigned):
+        builder = self.builder
+        kind = right.type
+        if isinstance(right, ir.Constant) and right.constant not in (0, -1):
+            if operator == "/":
+                return builder.udiv(left, right) if unsigned else builder.sdiv(left, right)
+            return builder.urem(left, right) if unsigned else builder.srem(left, right)
+        fn = builder.function
+        bad = fn.append_basic_block(name="divide_by_zero")
+        good = fn.append_basic_block(name="divide_ok")
+        builder.cbranch(builder.icmp_unsigned("==", right, ir.Constant(kind, 0)), bad, good)
+        builder.position_at_end(bad)
+        self.throw_now("division by zero" if operator == "/" else "modulo by zero")
+        builder.position_at_end(good)
+        if unsigned:
+            return builder.udiv(left, right) if operator == "/" else builder.urem(left, right)
+        minus_one = builder.icmp_signed("==", right, ir.Constant(kind, -1))
+        safe = builder.select(minus_one, ir.Constant(kind, 1), right)
+        if operator == "/":
+            return builder.select(minus_one, builder.sub(ir.Constant(kind, 0), left), builder.sdiv(left, safe))
+        return builder.select(minus_one, ir.Constant(kind, 0), builder.srem(left, safe))
+
     def visit_UnaryOpNode(self, node):
         value, val_ty = self.visit(node.operand)
+        if node.operator == "-" and val_ty.startswith("class:"):
+            res = self.call_method_with_values(value, val_ty, "-", [])
+            if res is None:
+                raise TypeError(f"'{val_ty[6:]}' has no unary operator -; add: func -() : {val_ty[6:]}")
+            return res
         if node.operator == "-":
             if val_ty in INTEGER_BITS:
                 return self.builder.neg(value), val_ty
@@ -806,6 +935,18 @@ class LanguageCore:
         return self.compare_values(node.operator, lhs, lhs_ty, rhs, rhs_ty)
 
     def compare_values(self, operator, left_value, left_type, right_value, right_type):
+        if left_type == "none" and right_type == "none":
+            return ir.Constant(self.bool_type, 1 if operator == "==" else 0), "bool"
+        if right_type == "none":
+            return self.compare_with_none(operator, left_value, left_type)
+        if left_type == "none":
+            return self.compare_with_none(operator, right_value, right_type)
+        if left_type.startswith("class:"):
+            return self.operator_method(operator, left_value, left_type, right_value, right_type)
+        if left_type.startswith("interface:") and right_type.startswith("interface:") and operator in ("==", "!="):
+            left = self.builder.extract_value(self.as_value(left_value), 0)
+            right = self.builder.extract_value(self.as_value(right_value), 0)
+            return self.builder.icmp_unsigned(operator, left, right), "bool"
         if left_type != right_type:
             raise TypeError(f"Cannot compare {describe_type(left_type)} with {describe_type(right_type)}")
         if left_type in FLOAT_TYPES:
@@ -865,8 +1006,8 @@ class LanguageCore:
             if src_ty == "bool":
                 return builder.zext(value, target_llvm, name="cast_int"), target_type
             if src_ty == "str" and target_type != "char":
-                atoll = self.get_win32_function("atoll", self.int64_type, [self.char_pointer_type])
-                wide = builder.call(atoll, [value])
+                parse = self.runtime_function("vamp_str_to_i64", self.int64_type, [self.char_pointer_type])
+                wide = builder.call(parse, [value])
                 return (wide if target_bits == 64 else builder.trunc(wide, target_llvm)), target_type
         elif target_type in FLOAT_TYPES:
             if source_integer:
@@ -880,7 +1021,8 @@ class LanguageCore:
             if src_ty == "bool":
                 return builder.uitofp(value, target_llvm, name="cast_float"), target_type
             if src_ty == "str":
-                parsed = builder.call(self.atof_function, [value], name="atof_tmp")
+                parse = self.runtime_function("vamp_str_to_f64", ir.DoubleType(), [self.char_pointer_type])
+                parsed = builder.call(parse, [value], name="parsed")
                 if target_type == "float":
                     return parsed, "float"
                 return builder.fptrunc(parsed, self.float_type, name="fptrunc_tmp"), "f32"
@@ -897,6 +1039,16 @@ class LanguageCore:
                 is_one = builder.icmp_signed("==", builder.call(self.strcmp_function, [value, one_string]), zero)
                 return builder.or_(is_true, is_one, name="cast_bool"), "bool"
         elif target_type == "str":
+            if isinstance(value, ArrayLiteralValue):
+                parts = [self.quoted_text(elem, value.element_type) for elem in value.elements]
+                joined = []
+                for idx, part in enumerate(parts):
+                    joined += [self.string_constant(", "), part] if idx else [part]
+                return self.concat_strings([self.string_constant("["), *joined, self.string_constant("]")]), "str"
+            if self.is_collection_type(value_type):
+                return self.collection_text(value, value_type), "str"
+            if value_type.startswith(("class:", "interface:", "optional:")):
+                return self.object_text(value, value_type), "str"
             if value_type == "bool":
                 true_string = self.visit_LiteralNode(LiteralNode("str", "true"))[0]
                 false_string = self.visit_LiteralNode(LiteralNode("str", "false"))[0]
@@ -908,6 +1060,12 @@ class LanguageCore:
                 builder.store(value, buf)
                 builder.store(ir.Constant(self.int8_type, 0), builder.gep(buf, [ir.Constant(self.int32_type, 1)]))
                 return buf, "str"
+            if value_type in INTEGER_BITS:
+                unsigned = value_type in UNSIGNED_TYPES
+                wide = self.fit_integer(value, self.int64_type, unsigned=unsigned)
+                symbol = "vamp_str_from_u64" if unsigned else "vamp_str_from_i64"
+                return builder.call(self.runtime_function(
+                    symbol, self.char_pointer_type, [self.int64_type]), [wide]), "str"
             formatted = self.printf_argument(value, value_type)
             if formatted is not None:
                 format_text, arg = formatted
@@ -1220,6 +1378,11 @@ class LanguageCore:
         if val_ty.startswith("map:"):
             self.emit_map_loop(value, val_ty, node.item_name, node.body)
             return
+        if val_ty.startswith("set:"):
+            self.emit_map_loop(value, self.set_map_type(val_ty), node.item_name, node.body)
+            return
+        if val_ty.startswith("class:"):
+            return self.emit_iterator_loop(value, val_ty, node)
         if val_ty == "str":
             length = self.builder.sext(self.builder.call(self.strlen_function, [value]), self.int64_type)
 
@@ -1418,7 +1581,7 @@ class LanguageCore:
     def prepare_arguments(self, argument_nodes):
         prepared = []
         for node in argument_nodes:
-            if is_number_literal(node):
+            if is_number_literal(node) or (isinstance(node, LiteralNode) and node.literal_type == "none"):
                 prepared.append((node, None, node.literal_type))
             elif isinstance(node, ArrayLiteralNode):
                 prepared.append((node, None, "list literal"))
@@ -1429,8 +1592,7 @@ class LanguageCore:
                 prepared.append((node, value, val_ty))
         return prepared
 
-    @staticmethod
-    def argument_fits(prepared, parameter_type):
+    def argument_fits(self, prepared, parameter_type):
         _, value, val_ty = prepared
         if val_ty == parameter_type:
             return 2
@@ -1443,12 +1605,19 @@ class LanguageCore:
                 return 2
             if val_ty == "map literal" and parameter_type.startswith("map:"):
                 return 2
-        return 0
+            if val_ty == "none" and parameter_type.startswith("optional:"):
+                return 1
+            return 0
+        return 1 if self.can_convert(val_ty, parameter_type) else 0
 
     def finish_argument(self, prepared, parameter_type):
         node, value, val_ty = prepared
         if value is None:
-            value, val_ty = self.visit_as(node, parameter_type)
+            return self.visit_as(node, parameter_type)
+        if val_ty != parameter_type:
+            converted = self.convert_value(value, val_ty, parameter_type)
+            if converted is not None:
+                return converted
         return value, val_ty
 
     def bind_call_arguments(self, shown_name, kind, parameters, defaults, argument_nodes, prepared=None):
@@ -1542,8 +1711,8 @@ class LanguageCore:
             return self.builder.sext(self.builder.call(self.strlen_function, [value]), self.int64_type), "int"
         if val_ty.startswith("list:"):
             return self.list_length(value), "int"
-        if val_ty.startswith("map:"):
-            return self.call_runtime("vamp_map_length", (val_ty,), "int", [value])
+        if val_ty.startswith(("map:", "set:")):
+            return self.call_runtime("vamp_map_length", ("str",), "int", [value])
         if isinstance(value, ArrayLiteralValue):
             return ir.Constant(self.int64_type, len(value.elements)), "int"
         raise TypeError(f"len cannot measure a value of type {describe_type(val_ty)}")
@@ -1599,187 +1768,20 @@ class LanguageCore:
         finally:
             self.classes_being_registered.discard(class_name)
 
-    def register_class_tree(self, node, parent_name=None):
-        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
-        if qualified_name in self.class_definitions:
-            raise SyntaxError(f"Class '{qualified_name}' is already declared")
-        fields = {}
-        field_order = []
-        llvm_field_types = []
-        base_name = getattr(node, "parent", None)
-        if base_name is not None:
-            self.ensure_class_registered(base_name)
-            base = self.class_definitions.get(base_name)
-            if base is None:
-                close = suggest(base_name, list(self.class_definitions) + list(self.pending_classes))
-                msg = f"Class '{qualified_name}' inherits from '{base_name}', which is not declared"
-                if close:
-                    msg += f" (did you mean '{close}'?)"
-                raise NameError(msg)
-            if base.get("is_struct"):
-                raise TypeError(f"Class '{qualified_name}' cannot inherit from struct '{base_name}'")
-            fields = dict(base["fields"])
-            field_order = list(base["field_order"])
-            llvm_field_types = list(base["llvm_type"].elements)
-        for field_name, field_ty, is_constant in node.fields:
-            if field_name in fields:
-                raise SyntaxError(f"Duplicate field '{field_name}' in class '{qualified_name}'")
-            field_ty = self.resolve_type(field_ty)
-            fields[field_name] = (len(field_order), field_ty, is_constant)
-            field_order.append(field_name)
-            llvm_field_types.append(self.llvm_type_for(field_ty))
-        self.class_definitions[qualified_name] = {
-            "fields": fields,
-            "field_order": field_order,
-            "llvm_type": ir.LiteralStructType(llvm_field_types),
-            "nested_classes": {
-                nested.class_name: f"{qualified_name}.{nested.class_name}" for nested in node.nested_classes
-            },
-            "methods": node.methods,
-            "parent": base_name,
-            "is_struct": getattr(node, "is_struct", False),
-        }
-        for nested_class in node.nested_classes:
-            self.register_class_tree(nested_class, qualified_name)
-
-    def declare_class_methods(self, node, parent_name=None):
-        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
-        for meth in node.methods:
-            method_key = (qualified_name, meth.function_name)
-            if method_key in self.class_methods:
-                raise SyntaxError(
-                    f"Method '{meth.function_name}' is already declared on '{qualified_name}'")
-            params = [(name, self.resolve_type(ty_name)) for name, ty_name in meth.parameters]
-            ret_ty = self.resolve_type(meth.return_type)
-            function_type = ir.FunctionType(
-                self.llvm_type_for(ret_ty),
-                [self.class_definitions[qualified_name]["llvm_type"].as_pointer(),
-                 *[self.llvm_type_for(ty_name) for _, ty_name in params]],
-            )
-            fn = ir.Function(
-                self.module, function_type,
-                name=f"{qualified_name.replace('.', '__')}__{meth.function_name}")
-            fn.linkage = "internal"
-            self.class_methods[method_key] = {
-                "function": fn, "return_type": ret_ty, "parameters": params,
-                "declaration": meth, "defaults": getattr(meth, "defaults", {}), "owner": qualified_name,
-            }
-        for nested_class in node.nested_classes:
-            self.declare_class_methods(nested_class, qualified_name)
-
-    def emit_class_methods(self, node, parent_name=None):
-        qualified_name = f"{parent_name}.{node.class_name}" if parent_name else node.class_name
-        for meth in node.methods:
-            method_key = (qualified_name, meth.function_name)
-            if method_key in self.emitted_class_methods:
-                continue
-            self.emitted_class_methods.add(method_key)
-            info = self.class_methods[method_key]
-            fn = info["function"]
-            saved = self.enter_function(fn, info["return_type"], qualified_name)
-            self.bind_variable("self", fn.args[0], f"class:{qualified_name}")
-            for idx, (parameter_name, parameter_type) in enumerate(info["parameters"], start=1):
-                ptr = self.entry_alloca(self.llvm_type_for(parameter_type), parameter_name)
-                self.builder.store(fn.args[idx], ptr)
-                self.bind_variable(parameter_name, ptr, parameter_type)
-            self.visit_block(meth.body)
-            self.leave_function(saved, f"Method '{qualified_name}.{meth.function_name}'")
-        for nested_class in node.nested_classes:
-            self.emit_class_methods(nested_class, qualified_name)
-
-    def visit_ClassDeclarationNode(self, node):
-        if node.class_name not in self.class_definitions:
-            self.register_class_tree(node)
-            self.declare_class_methods(node)
-        if node not in self.top_level_classes:
-            self.emit_class_methods(node)
-
-    def find_method(self, class_name, method_name):
-        while class_name is not None:
-            info = self.class_methods.get((class_name, method_name))
-            if info is not None:
-                return info
-            class_name = self.class_definitions[class_name].get("parent")
-        return None
-
-    def method_names(self, class_name):
-        names = []
-        while class_name is not None:
-            names.extend(method for owner, method in self.class_methods if owner == class_name)
-            names.extend(self.class_definitions[class_name]["nested_classes"])
-            class_name = self.class_definitions[class_name].get("parent")
-        return names
-
-    def create_class_instance(self, class_name, arguments, instance_name=None):
-        defn = self.class_definitions.get(class_name)
-        if defn is None:
-            raise NameError(f"Class '{class_name}' is not declared")
-        field_order = defn["field_order"]
-        if len(arguments) != len(field_order):
-            raise TypeError(f"Class '{class_name}' expects {len(field_order)} values, got {len(arguments)}")
-        ptr = self.entry_alloca(defn["llvm_type"], instance_name or f"{class_name.lower()}_instance")
-        for field_index, (field_name, arg) in enumerate(zip(field_order, arguments)):
-            _, want_ty, _ = defn["fields"][field_name]
-            value, val_ty = self.visit_as(arg, want_ty)
-            if val_ty != want_ty:
-                raise TypeError(
-                    f"Field '{field_name}' in class '{class_name}' expects "
-                    f"{describe_type(want_ty)}, got {describe_type(val_ty)}"
-                )
-            self.builder.store(self.as_value(value), self.builder.gep(
-                ptr, [ir.Constant(self.int32_type, 0), ir.Constant(self.int32_type, field_index)],
-                name=f"{field_name}_pointer"))
-        return ClassInstanceValue(ptr, temporary=True), f"class:{class_name}"
-
-    def call_class_method(self, receiver_pointer, class_name, node, shown_receiver):
-        defn = self.class_definitions[class_name]
-        nested_class_name = defn["nested_classes"].get(node.method_name)
-        if nested_class_name is not None:
-            return self.create_class_instance(nested_class_name, node.arguments)
-        info = self.find_method(class_name, node.method_name)
-        if info is None:
-            close = suggest(node.method_name, self.method_names(class_name))
-            msg = f"Class '{class_name}' has no method or nested class '{node.method_name}'"
-            if close:
-                msg += f" (did you mean '{close}'?)"
-            raise NameError(msg)
-        vals = self.bind_call_arguments(
-            f"{class_name}.{node.method_name}", "Method", info["parameters"],
-            info["defaults"], node.arguments)
-        owner_type = self.class_definitions[info["owner"]]["llvm_type"].as_pointer()
-        if receiver_pointer.type != owner_type:
-            receiver_pointer = self.builder.bitcast(receiver_pointer, owner_type)
-        ret_ty = info["return_type"]
-        if ret_ty == "void":
-            self.builder.call(info["function"], [receiver_pointer, *vals])
-            return None, "void"
-        res = self.builder.call(
-            info["function"], [receiver_pointer, *vals], name=f"{node.method_name}_result")
-        return self.wrap_value(res, ret_ty), ret_ty
-
-    def visit_MethodCallNode(self, node):
-        receiver = node.receiver
-        if isinstance(receiver, VariableAccessNode):
-            name = receiver.variable_name
-            if name == "super" and "super" not in self.type_information:
-                parent = self.class_definitions[self.current_class].get("parent") if self.current_class else None
-                if parent is None:
-                    raise TypeError("'super' can only be used in a method of a class that inherits from another")
-                return self.call_class_method(self.variable_pointers["self"], parent, node, "super")
-            if name not in self.type_information and name in self.enum_definitions:
-                raise TypeError(f"Enum '{name}' has no methods; write {name}.Member to use a member")
-        value, val_ty = self.visit(receiver)
-        if isinstance(value, ClassInstanceValue):
-            return self.call_class_method(value.pointer, val_ty[6:], node, "value")
-        if val_ty == "str":
+    def visit_value_method(self, value, value_type, node, receiver):
+        if value_type == "str":
             return self.emit_string_method(value, node)
-        if val_ty.startswith("list:"):
-            return self.emit_list_method(value, val_ty, node)
-        if val_ty.startswith("map:"):
-            return self.emit_map_method(value, val_ty, node)
+        if value_type.startswith("list:"):
+            return self.emit_list_method(value, value_type, node)
+        if value_type.startswith("map:"):
+            return self.emit_map_method(value, value_type, node)
+        if value_type.startswith("set:"):
+            return self.emit_set_method(value, value_type, node)
+        if value_type == "builder":
+            return self.emit_builder_method(value, node)
         if isinstance(receiver, VariableAccessNode):
             raise TypeError(f"'{receiver.variable_name}' is not a class instance")
-        raise TypeError(f"Values of type {describe_type(val_ty)} have no methods")
+        raise TypeError(f"Values of type {describe_type(value_type)} have no methods")
 
     def emit_string_method(self, value, node):
         meth = STRING_METHODS.get(node.method_name)
@@ -1868,8 +1870,24 @@ class LanguageCore:
         zero = ir.Constant(int32, 0)
         if meth == "push":
             value, = self.check_arguments(what, node.arguments, (elem_ty,))
+            header = self.list_header(list_value)
+            length_pointer = self.builder.gep(header, [zero, zero])
+            length = self.builder.load(length_pointer)
+            cap = self.builder.load(self.builder.gep(header, [zero, ir.Constant(int32, 1)]))
+            fn = self.builder.function
+            fast_block = fn.append_basic_block(name="push_fast")
+            slow_block = fn.append_basic_block(name="push_grow")
+            done_block = fn.append_basic_block(name="push_done")
+            self.builder.cbranch(self.builder.icmp_signed("<", length, cap), fast_block, slow_block)
+            self.builder.position_at_end(fast_block)
+            self.builder.store(self.as_value(value), self.builder.gep(self.list_data(list_value, elem_ty), [length]))
+            self.builder.store(self.builder.add(length, ir.Constant(int32, 1)), length_pointer)
+            self.builder.branch(done_block)
+            self.builder.position_at_end(slow_block)
             slot = self.builder.call(self.runtime_function("vamp_list_push_slot", ptr, [ptr]), [list_value])
             self.store_into_slot(slot, value, elem_ty)
+            self.builder.branch(done_block)
+            self.builder.position_at_end(done_block)
             return None, "void"
         if meth == "pop":
             self.check_arguments(what, node.arguments, ())
@@ -1897,8 +1915,8 @@ class LanguageCore:
             return self.builder.icmp_signed("==", self.list_length(list_value), ir.Constant(self.int64_type, 0)), "bool"
         if meth in ("contains", "index_of"):
             value, = self.check_arguments(what, node.arguments, (elem_ty,))
-            if elem_ty.startswith("class:"):
-                raise TypeError(f"{what} cannot compare class or struct values")
+            if elem_ty.startswith("class:") and not self.is_reference_class(elem_ty[6:]):
+                raise TypeError(f"{what} cannot compare struct values")
             if elem_ty == "str":
                 found, _ = self.call_runtime(
                     "vamp_list_index_of_str", (list_type, "str"), "int", [list_value, value])
@@ -2092,7 +2110,8 @@ class LanguageCore:
             format_text, arg = "%c", self.builder.zext(value, self.int32_type)
         elif val_ty == "str":
             format_text, arg = "%s", value
-        elif val_ty == "bool" or val_ty.startswith("enum:"):
+        elif val_ty == "bool" or val_ty.startswith(("enum:", "class:", "interface:", "optional:")) \
+                or self.is_collection_type(val_ty):
             format_text, arg = "%s", self.cast_value(value, val_ty, "str")[0]
         else:
             raise TypeError(
@@ -2110,10 +2129,13 @@ class LanguageCore:
         ptr, pointer_type = self.visit(node.pointer_expression)
         if pointer_type.startswith("list:"):
             return self.call_runtime("vamp_list_free", (pointer_type,), "void", [ptr])
-        if pointer_type.startswith("map:"):
-            return self.call_runtime("vamp_map_free", (pointer_type,), "void", [ptr])
+        if pointer_type.startswith(("map:", "set:")):
+            return self.call_runtime("vamp_map_free", ("str",), "void", [ptr])
         if pointer_type == "json":
             return self.call_runtime("vamp_json_free", ("json",), "void", [ptr])
+        if pointer_type.startswith("class:") and self.is_reference_class(pointer_type[6:]):
+            self.builder.call(self.free_function, [self.builder.bitcast(ptr.pointer, self.char_pointer_type)])
+            return None, "void"
         if pointer_type != "str" and not pointer_type.startswith("pointer:"):
             raise TypeError(f"free() expected an allocated pointer, got {describe_type(pointer_type)}")
         if isinstance(ptr, PointerValue):

@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "vamp_runtime.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <windows.h>
@@ -584,6 +585,399 @@ static LRESULT CALLBACK vamp_modern_window_proc(HWND window, UINT message, WPARA
     return DefSubclassProc(window, message, wparam, lparam);
 }
 
+#define KIND_CANVAS 5
+#define VAMP_MAX_CANVAS_ID 65536
+
+int WINAPI GdipCreateBitmapFromFile(const WCHAR *path, void **bitmap);
+int WINAPI GdipDrawImageRectI(void *graphics, void *image, int x, int y, int width, int height);
+int WINAPI GdipSetInterpolationMode(void *graphics, int mode);
+int WINAPI GdipCreateBitmapFromScan0(int width, int height, int stride, int format, BYTE *scan0, void **bitmap);
+int WINAPI GdipSaveImageToFile(void *image, const WCHAR *path, const CLSID *encoder, const void *parameters);
+int WINAPI GdipDisposeImage(void *image);
+
+typedef struct {
+    HWND window;
+    SRWLOCK lock;
+    int width;
+    int height;
+    HDC back_dc;
+    HDC front_dc;
+    HBITMAP back_bitmap;
+    HBITMAP front_bitmap;
+    HGDIOBJ back_old;
+    HGDIOBJ front_old;
+    uint32_t *back;
+    uint32_t clear;
+} VampCanvas;
+
+typedef struct {
+    char *path;
+    void *bitmap;
+} VampImage;
+
+static VampCanvas *vamp_canvases[VAMP_MAX_CANVAS_ID];
+static VampImage vamp_images[256];
+static int vamp_image_count;
+static SRWLOCK vamp_image_lock = SRWLOCK_INIT;
+
+static uint32_t vamp_pixel(COLORREF color) {
+    return ((uint32_t)GetRValue(color) << 16) | ((uint32_t)GetGValue(color) << 8) | GetBValue(color);
+}
+
+static COLORREF vamp_parse_color(const char *text) {
+    static const struct { const char *name; COLORREF color; } names[] = {
+        {"black", RGB(0, 0, 0)}, {"white", RGB(255, 255, 255)}, {"red", RGB(220, 40, 40)},
+        {"green", RGB(40, 170, 70)}, {"blue", RGB(40, 90, 220)}, {"yellow", RGB(240, 210, 40)},
+        {"orange", RGB(240, 140, 30)}, {"purple", RGB(140, 70, 200)}, {"gray", RGB(128, 128, 128)},
+        {"grey", RGB(128, 128, 128)},
+    };
+    unsigned int red;
+    unsigned int green;
+    unsigned int blue;
+    if (text[0] == '#' && strlen(text) == 7 && sscanf(text + 1, "%2x%2x%2x", &red, &green, &blue) == 3) {
+        return RGB(red, green, blue);
+    }
+    for (size_t index = 0; index < sizeof(names) / sizeof(names[0]); index++) {
+        if (_stricmp(names[index].name, text) == 0) {
+            return names[index].color;
+        }
+    }
+    vamp_throw_format("\"%s\" is not a color; use \"#RRGGBB\" or a name such as \"red\"", text);
+    return 0;
+}
+
+static HBITMAP vamp_canvas_bitmap(HDC dc, int width, int height, uint32_t **pixels) {
+    BITMAPINFO info;
+    memset(&info, 0, sizeof(info));
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = width;
+    info.bmiHeader.biHeight = -height;
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    return CreateDIBSection(dc, &info, DIB_RGB_COLORS, (void **)pixels, NULL, 0);
+}
+
+static LRESULT CALLBACK vamp_canvas_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR id,
+                                         DWORD_PTR data) {
+    VampCanvas *canvas = (VampCanvas *)data;
+    if (message == WM_ERASEBKGND) {
+        return 1;
+    }
+    if (message == WM_PAINT) {
+        PAINTSTRUCT paint;
+        HDC dc = BeginPaint(window, &paint);
+        AcquireSRWLockShared(&canvas->lock);
+        BitBlt(dc, 0, 0, canvas->width, canvas->height, canvas->front_dc, 0, 0, SRCCOPY);
+        ReleaseSRWLockShared(&canvas->lock);
+        EndPaint(window, &paint);
+        return 0;
+    }
+    if (message == WM_NCDESTROY) {
+        int control = GetDlgCtrlID(window);
+        RemoveWindowSubclass(window, vamp_canvas_proc, id);
+        AcquireSRWLockExclusive(&canvas->lock);
+        if (control > 0 && control < VAMP_MAX_CANVAS_ID && vamp_canvases[control] == canvas) {
+            vamp_canvases[control] = NULL;
+        }
+        ReleaseSRWLockExclusive(&canvas->lock);
+    }
+    return DefSubclassProc(window, message, wparam, lparam);
+}
+
+static void vamp_canvas_create(HWND control) {
+    RECT client;
+    VampCanvas *canvas = (VampCanvas *)calloc(1, sizeof(VampCanvas));
+    uint32_t *front = NULL;
+    intptr_t color = vamp_prop(control, "vamp.background.color");
+    int id = GetDlgCtrlID(control);
+    if (!canvas || id <= 0 || id >= VAMP_MAX_CANVAS_ID) {
+        free(canvas);
+        return;
+    }
+    GetClientRect(control, &client);
+    canvas->window = control;
+    InitializeSRWLock(&canvas->lock);
+    canvas->width = client.right > 0 ? client.right : 1;
+    canvas->height = client.bottom > 0 ? client.bottom : 1;
+    canvas->back_dc = CreateCompatibleDC(NULL);
+    canvas->front_dc = CreateCompatibleDC(NULL);
+    canvas->back_bitmap = vamp_canvas_bitmap(canvas->back_dc, canvas->width, canvas->height, &canvas->back);
+    canvas->front_bitmap = vamp_canvas_bitmap(canvas->front_dc, canvas->width, canvas->height, &front);
+    canvas->back_old = SelectObject(canvas->back_dc, canvas->back_bitmap);
+    canvas->front_old = SelectObject(canvas->front_dc, canvas->front_bitmap);
+    canvas->clear = vamp_pixel(color ? (COLORREF)(color - 1) : vamp_window_background(vamp_root(control)));
+    for (int index = 0; index < canvas->width * canvas->height; index++) {
+        canvas->back[index] = canvas->clear;
+        front[index] = canvas->clear;
+    }
+    SetWindowSubclass(control, vamp_canvas_proc, 2, (DWORD_PTR)canvas);
+    vamp_canvases[id] = canvas;
+}
+
+static VampCanvas *vamp_canvas_get(int32_t id) {
+    VampCanvas *canvas = id > 0 && id < VAMP_MAX_CANVAS_ID ? vamp_canvases[id] : NULL;
+    if (!canvas) {
+        vamp_throw("this canvas does not exist; create it with os.Make_Interface(\"canvas\", ...) first");
+    }
+    AcquireSRWLockExclusive(&canvas->lock);
+    return canvas;
+}
+
+static void vamp_canvas_done(VampCanvas *canvas) {
+    ReleaseSRWLockExclusive(&canvas->lock);
+}
+
+static void vamp_plot(VampCanvas *canvas, int x, int y, uint32_t pixel) {
+    if ((unsigned)x < (unsigned)canvas->width && (unsigned)y < (unsigned)canvas->height) {
+        canvas->back[y * canvas->width + x] = pixel;
+    }
+}
+
+static void vamp_span(VampCanvas *canvas, int left, int right, int y, uint32_t pixel) {
+    uint32_t *row;
+    if ((unsigned)y >= (unsigned)canvas->height) {
+        return;
+    }
+    if (left < 0) {
+        left = 0;
+    }
+    if (right >= canvas->width) {
+        right = canvas->width - 1;
+    }
+    row = canvas->back + (size_t)y * (size_t)canvas->width;
+    for (int x = left; x <= right; x++) {
+        row[x] = pixel;
+    }
+}
+
+void vamp_ui_canvas_clear(int32_t id, const char *color) {
+    uint32_t pixel = vamp_pixel(vamp_parse_color(color));
+    VampCanvas *canvas = vamp_canvas_get(id);
+    GdiFlush();
+    for (int index = 0; index < canvas->width * canvas->height; index++) {
+        canvas->back[index] = pixel;
+    }
+    vamp_canvas_done(canvas);
+}
+
+void vamp_ui_canvas_fill_rect(int32_t id, int32_t x, int32_t y, int32_t width, int32_t height, const char *color) {
+    uint32_t pixel = vamp_pixel(vamp_parse_color(color));
+    VampCanvas *canvas = vamp_canvas_get(id);
+    GdiFlush();
+    for (int row = y; row < y + height; row++) {
+        vamp_span(canvas, x, x + width - 1, row, pixel);
+    }
+    vamp_canvas_done(canvas);
+}
+
+void vamp_ui_canvas_draw_rect(int32_t id, int32_t x, int32_t y, int32_t width, int32_t height, const char *color) {
+    uint32_t pixel = vamp_pixel(vamp_parse_color(color));
+    VampCanvas *canvas = vamp_canvas_get(id);
+    GdiFlush();
+    vamp_span(canvas, x, x + width - 1, y, pixel);
+    vamp_span(canvas, x, x + width - 1, y + height - 1, pixel);
+    for (int row = y; row < y + height; row++) {
+        vamp_plot(canvas, x, row, pixel);
+        vamp_plot(canvas, x + width - 1, row, pixel);
+    }
+    vamp_canvas_done(canvas);
+}
+
+void vamp_ui_canvas_draw_line(int32_t id, int32_t x1, int32_t y1, int32_t x2, int32_t y2, const char *color) {
+    uint32_t pixel = vamp_pixel(vamp_parse_color(color));
+    VampCanvas *canvas = vamp_canvas_get(id);
+    int dx = abs(x2 - x1);
+    int dy = -abs(y2 - y1);
+    int step_x = x1 < x2 ? 1 : -1;
+    int step_y = y1 < y2 ? 1 : -1;
+    int error = dx + dy;
+    GdiFlush();
+    for (;;) {
+        vamp_plot(canvas, x1, y1, pixel);
+        if (x1 == x2 && y1 == y2) {
+            break;
+        }
+        {
+            int twice = 2 * error;
+            if (twice >= dy) {
+                error += dy;
+                x1 += step_x;
+            }
+            if (twice <= dx) {
+                error += dx;
+                y1 += step_y;
+            }
+        }
+    }
+    vamp_canvas_done(canvas);
+}
+
+static void vamp_circle(int32_t id, int32_t cx, int32_t cy, int32_t radius, const char *color, int fill) {
+    uint32_t pixel = vamp_pixel(vamp_parse_color(color));
+    VampCanvas *canvas = vamp_canvas_get(id);
+    int x = radius;
+    int y = 0;
+    int error = 1 - radius;
+    GdiFlush();
+    while (x >= y) {
+        if (fill) {
+            vamp_span(canvas, cx - x, cx + x, cy + y, pixel);
+            vamp_span(canvas, cx - x, cx + x, cy - y, pixel);
+            vamp_span(canvas, cx - y, cx + y, cy + x, pixel);
+            vamp_span(canvas, cx - y, cx + y, cy - x, pixel);
+        } else {
+            vamp_plot(canvas, cx + x, cy + y, pixel);
+            vamp_plot(canvas, cx - x, cy + y, pixel);
+            vamp_plot(canvas, cx + x, cy - y, pixel);
+            vamp_plot(canvas, cx - x, cy - y, pixel);
+            vamp_plot(canvas, cx + y, cy + x, pixel);
+            vamp_plot(canvas, cx - y, cy + x, pixel);
+            vamp_plot(canvas, cx + y, cy - x, pixel);
+            vamp_plot(canvas, cx - y, cy - x, pixel);
+        }
+        y++;
+        if (error < 0) {
+            error += 2 * y + 1;
+        } else {
+            x--;
+            error += 2 * (y - x) + 1;
+        }
+    }
+    vamp_canvas_done(canvas);
+}
+
+void vamp_ui_canvas_fill_circle(int32_t id, int32_t x, int32_t y, int32_t radius, const char *color) {
+    vamp_circle(id, x, y, radius, color, 1);
+}
+
+void vamp_ui_canvas_draw_circle(int32_t id, int32_t x, int32_t y, int32_t radius, const char *color) {
+    vamp_circle(id, x, y, radius, color, 0);
+}
+
+void vamp_ui_canvas_draw_text(int32_t id, int32_t x, int32_t y, const char *text, const char *color, int32_t size) {
+    static HFONT fonts[200];
+    COLORREF rgb = vamp_parse_color(color);
+    VampCanvas *canvas = vamp_canvas_get(id);
+    HGDIOBJ old;
+    if (size < 4) {
+        size = 4;
+    }
+    if (size > 199) {
+        size = 199;
+    }
+    if (!fonts[size]) {
+        fonts[size] = CreateFontA(-size, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                  CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    }
+    old = SelectObject(canvas->back_dc, fonts[size]);
+    SetBkMode(canvas->back_dc, TRANSPARENT);
+    SetTextColor(canvas->back_dc, rgb);
+    TextOutA(canvas->back_dc, x, y, text, (int)strlen(text));
+    SelectObject(canvas->back_dc, old);
+    GdiFlush();
+    vamp_canvas_done(canvas);
+}
+
+static void *vamp_image(const char *path) {
+    void *bitmap = NULL;
+    AcquireSRWLockExclusive(&vamp_image_lock);
+    for (int index = 0; index < vamp_image_count; index++) {
+        if (strcmp(vamp_images[index].path, path) == 0) {
+            bitmap = vamp_images[index].bitmap;
+            ReleaseSRWLockExclusive(&vamp_image_lock);
+            return bitmap;
+        }
+    }
+    if (vamp_gdiplus_ready()) {
+        WCHAR wide[MAX_PATH * 2];
+        if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, MAX_PATH * 2) &&
+            GdipCreateBitmapFromFile(wide, &bitmap) != 0) {
+            bitmap = NULL;
+        }
+    }
+    if (bitmap && vamp_image_count < 256) {
+        size_t length = strlen(path);
+        vamp_images[vamp_image_count].path = (char *)malloc(length + 1);
+        if (vamp_images[vamp_image_count].path) {
+            memcpy(vamp_images[vamp_image_count].path, path, length + 1);
+            vamp_images[vamp_image_count++].bitmap = bitmap;
+        }
+    }
+    ReleaseSRWLockExclusive(&vamp_image_lock);
+    return bitmap;
+}
+
+int32_t vamp_ui_canvas_draw_image(int32_t id, const char *path, int32_t x, int32_t y, int32_t width, int32_t height) {
+    void *bitmap = vamp_image(path);
+    VampCanvas *canvas;
+    void *graphics = NULL;
+    if (!bitmap) {
+        return 0;
+    }
+    canvas = vamp_canvas_get(id);
+    if (GdipCreateFromHDC(canvas->back_dc, &graphics) == 0) {
+        GdipSetInterpolationMode(graphics, 5);
+        GdipDrawImageRectI(graphics, bitmap, x, y, width, height);
+        GdipDeleteGraphics(graphics);
+    }
+    GdiFlush();
+    vamp_canvas_done(canvas);
+    return 1;
+}
+
+void vamp_ui_canvas_present(int32_t id) {
+    VampCanvas *canvas = vamp_canvas_get(id);
+    GdiFlush();
+    BitBlt(canvas->front_dc, 0, 0, canvas->width, canvas->height, canvas->back_dc, 0, 0, SRCCOPY);
+    GdiFlush();
+    vamp_canvas_done(canvas);
+    InvalidateRect(canvas->window, NULL, FALSE);
+}
+
+int32_t vamp_ui_canvas_save(int32_t id, const char *path) {
+    static const CLSID png = {0x557cf406, 0x1a04, 0x11d3, {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
+    static const CLSID bmp = {0x557cf400, 0x1a04, 0x11d3, {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
+    static const CLSID jpeg = {0x557cf401, 0x1a04, 0x11d3, {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
+    VampCanvas *canvas;
+    void *bitmap = NULL;
+    WCHAR wide[MAX_PATH * 2];
+    const char *dot = strrchr(path, '.');
+    const CLSID *encoder = &png;
+    int32_t saved = 0;
+    if (dot && _stricmp(dot, ".bmp") == 0) {
+        encoder = &bmp;
+    } else if (dot && (_stricmp(dot, ".jpg") == 0 || _stricmp(dot, ".jpeg") == 0)) {
+        encoder = &jpeg;
+    }
+    if (!vamp_gdiplus_ready() || !MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, MAX_PATH * 2)) {
+        return 0;
+    }
+    canvas = vamp_canvas_get(id);
+    GdiFlush();
+    if (GdipCreateBitmapFromScan0(canvas->width, canvas->height, canvas->width * 4, 0x00022009,
+                                  (BYTE *)canvas->back, &bitmap) == 0) {
+        saved = GdipSaveImageToFile(bitmap, wide, encoder, NULL) == 0;
+        GdipDisposeImage(bitmap);
+    }
+    vamp_canvas_done(canvas);
+    return saved;
+}
+
+int32_t vamp_ui_canvas_width(int32_t id) {
+    VampCanvas *canvas = vamp_canvas_get(id);
+    int32_t width = canvas->width;
+    vamp_canvas_done(canvas);
+    return width;
+}
+
+int32_t vamp_ui_canvas_height(int32_t id) {
+    VampCanvas *canvas = vamp_canvas_get(id);
+    int32_t height = canvas->height;
+    vamp_canvas_done(canvas);
+    return height;
+}
+
 static int vamp_system_uses_dark_theme(void) {
     DWORD light = 1;
     DWORD size = sizeof(light);
@@ -628,6 +1022,10 @@ void vamp_ui_style_control(void *handle, int32_t style, int32_t kind, int32_t ra
     vamp_set_prop(control, PROP_KIND, kind + 1);
     if (radius >= 0) {
         vamp_set_prop(control, PROP_RADIUS, radius + 1);
+    }
+    if (kind == KIND_CANVAS) {
+        vamp_canvas_create(control);
+        return;
     }
     if (style == STYLE_CLASSIC) {
         SetWindowTheme(control, L" ", L" ");

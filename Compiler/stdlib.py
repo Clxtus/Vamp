@@ -2,7 +2,7 @@ from llvmlite import ir
 
 from diagnostics import suggest
 from language import FLOAT_TYPES, INTEGER_BITS, describe_type
-from libraries import STANDARD_LIBRARIES
+from libraries import OS_RUNTIME, STANDARD_LIBRARIES
 from parser import MethodCallNode, VariableAccessNode
 
 
@@ -17,6 +17,14 @@ class StandardLibrary:
             if not resolved and library not in self.imported_libraries:
                 raise NameError(f"Library '{library}' is not imported. Add 'import {library}' at top of file.")
             return self.emit_standard_library_call(node)
+        if library == "os" and node.method_name in self.EVENT_METHODS:
+            if not resolved and "os" not in self.imported_libraries:
+                raise NameError("Library 'os' is not imported. Add 'import os' at top of file.")
+            return self.emit_event_call(node)
+        if library == "os" and node.method_name in OS_RUNTIME:
+            if not resolved and "os" not in self.imported_libraries:
+                raise NameError("Library 'os' is not imported. Add 'import os' at top of file.")
+            return self.emit_standard_library_call(node, OS_RUNTIME)
         if library not in ("os", "Directory") and not resolved:
             return self.visit_MethodCallNode(
                 MethodCallNode(VariableAccessNode(library), node.method_name, node.arguments))
@@ -30,13 +38,13 @@ class StandardLibrary:
             return self.fit_integer(res[0], self.int64_type), "int"
         return res
 
-    def emit_standard_library_call(self, node):
+    def emit_standard_library_call(self, node, methods=None):
         library = node.library_name
-        meths = STANDARD_LIBRARIES[library]
-        specification = meths.get(node.method_name)
+        methods = methods or STANDARD_LIBRARIES[library]
+        specification = methods.get(node.method_name)
         shown = f"{library}.{node.method_name}"
         if specification is None:
-            close = suggest(node.method_name, meths)
+            close = suggest(node.method_name, methods)
             msg = f"Library '{library}' has no method named '{node.method_name}'"
             if close:
                 msg += f" (did you mean '{close}'?)"
@@ -92,7 +100,11 @@ class StandardLibrary:
         if not 1 <= len(node.arguments) <= 2:
             raise TypeError("thread.Start expects a function name, and optionally one int to pass to it")
         target = node.arguments[0]
-        if not isinstance(target, VariableAccessNode) or target.variable_name not in self.function_overloads:
+        named = isinstance(target, VariableAccessNode) and target.variable_name not in self.type_information \
+            and target.variable_name in self.function_overloads
+        if not named and len(node.arguments) == 1:
+            return self.emit_closure_thread(node)
+        if not named:
             raise TypeError(
                 "The first argument of thread.Start must be the name of a function, for example thread.Start(worker)")
         name = target.variable_name

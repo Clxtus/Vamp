@@ -12,8 +12,9 @@ TOKEN_PATTERNS = [
     ("BOOL", r"\b(true|false)\b"),
     ("OPERATOR", r"<<=|>>=|<<|>>|&&|\|\||\b(?:and|or|not)\b"),
     ("COMPARISON_OPERATOR", r"==|!=|<=|>=|<|>"),
+    ("FSTRING", r'\bf"(?:\\.|[^"\\])*"'),
     ("IDENTIFIER", r"\b[a-zA-Z_][a-zA-Z0-9_]*\b"),
-    ("FLOAT_LITERAL", r"\b\d+\.\d+\b"),
+    ("FLOAT_LITERAL", r"\b\d+(?:\.\d+(?:[eE][+-]?\d+)?|[eE][+-]?\d+)\b"),
     ("INT_LITERAL", r"\b0[xX][0-9a-fA-F]+\b|\b0[bB][01]+\b|\b\d+\b"),
     ("STRING_LITERAL", r'"(?:\\.|[^"\\])*"'),
     ("CHAR_LITERAL", r"'(?:\\[ntr0\\']|[^'\\\n])'"),
@@ -27,6 +28,7 @@ TOKEN_PATTERNS = [
     ("COLON", r":"),
     ("COMMA", r","),
     ("SEMICOLON", r";"),
+    ("QUESTION", r"\?"),
     ("DOT", r"\."),
     ("SKIP", r"[ \t\r\n]+"),
 ]

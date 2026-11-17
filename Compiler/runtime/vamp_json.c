@@ -20,6 +20,16 @@ typedef struct VampJson {
     struct VampJson **items;
 } VampJson;
 
+static char *json_copy(const char *text, size_t length) {
+    char *copy = (char *)malloc(length + 1);
+    if (!copy) {
+        vamp_throw("out of memory while building JSON");
+    }
+    memcpy(copy, text, length);
+    copy[length] = 0;
+    return copy;
+}
+
 static const char *const vamp_json_type_names[] = {"null", "bool", "number", "string", "array", "object"};
 
 static VampJson *json_make(int type) {
@@ -71,7 +81,7 @@ static void json_reserve(VampJson *node) {
 static VampJson *json_append(VampJson *container, const char *key, size_t key_length, VampJson *child) {
     json_reserve(container);
     if (container->type == JSON_OBJECT) {
-        container->keys[container->count] = vamp_string_copy_length(key, key_length);
+        container->keys[container->count] = json_copy(key, key_length);
     }
     container->items[container->count++] = child;
     return child;
@@ -555,7 +565,7 @@ int32_t vamp_json_get_bool_or(VampJson *root, const char *path, int32_t fallback
 void vamp_json_set_str(VampJson *root, const char *path, const char *value) {
     VampJson *node = json_target(root, path);
     node->type = JSON_STRING;
-    node->string = vamp_string_copy(value);
+    node->string = json_copy(value, strlen(value));
 }
 
 void vamp_json_set_int(VampJson *root, const char *path, int64_t value) {
@@ -599,7 +609,7 @@ static VampJson *json_new_element(VampJson *root, const char *path) {
 void vamp_json_append_str(VampJson *root, const char *path, const char *value) {
     VampJson *node = json_new_element(root, path);
     node->type = JSON_STRING;
-    node->string = vamp_string_copy(value);
+    node->string = json_copy(value, strlen(value));
 }
 
 void vamp_json_append_int(VampJson *root, const char *path, int64_t value) {
@@ -647,7 +657,7 @@ int32_t vamp_json_remove(VampJson *root, const char *path) {
             split--;
         }
     }
-    parent_path = vamp_string_copy_length(path, split);
+    parent_path = json_copy(path, split);
     parent = json_walk(root, parent_path, 0);
     free(parent_path);
     if (!parent) {
@@ -747,7 +757,7 @@ static void json_write_node(JsonWriter *writer, const VampJson *node, int pretty
     case JSON_NUMBER: {
         char *text = json_number_text(node);
         json_write(writer, text, strlen(text));
-        free(text);
+        vamp_free(text);
         break;
     }
     case JSON_STRING: json_write_string(writer, node->string); break;
@@ -777,7 +787,11 @@ char *vamp_json_to_text(int32_t pretty, VampJson *root) {
     JsonWriter writer = {NULL, 0, 0};
     json_write(&writer, "", 0);
     json_write_node(&writer, root, pretty, 0);
-    return writer.text;
+    {
+        char *text = vamp_string_copy_length(writer.text, writer.length);
+        free(writer.text);
+        return text;
+    }
 }
 
 int32_t vamp_json_save(VampJson *root, const char *path) {
@@ -789,6 +803,6 @@ int32_t vamp_json_save(VampJson *root, const char *path) {
         ok = fwrite(text, 1, length, file) == length;
         fclose(file);
     }
-    free(text);
+    vamp_free(text);
     return ok;
 }

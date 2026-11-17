@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-us" Codepage="1252" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="WelcomeDlgTitle">{\WixUI_Font_Bigger}Welcome to Vamp</String>
+  <String Id="WelcomeDlgDescription">This will install the Vamp programming language and the Vamp extension for Visual Studio Code.
+
+Click Next to continue.</String>
+  <String Id="LicenseAgreementDlgTitle">{\WixUI_Font_Title}License</String>
+  <String Id="LicenseAgreementDlgDescription">Vamp is free and open source under the MIT License.</String>
+  <String Id="LicenseDlgWindowTitle">Vamp Setup</String>
+  <String Id="PathDlgWindowTitle">Vamp Setup</String>
+  <String Id="PathDlgTitle">{\WixUI_Font_Title}Choose where to install Vamp</String>
+  <String Id="PathDlgDescription">Vamp and its Visual Studio Code extension will be installed.</String>
+  <String Id="PathDlgFolderLabel">Choose an installation folder:</String>
+  <String Id="PathDlgChoosePath">Choose...</String>
+  <String Id="PathDlgInstall">Install</String>
+  <String Id="ExitDialogTitle">{\WixUI_Font_Bigger}Vamp is installed</String>
+  <String Id="ExitDialogDescription">Open a new terminal and type vamp to get started. The examples are in the Start menu.</String>
+</WixLocalization>

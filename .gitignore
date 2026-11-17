@@ -1,7 +1,13 @@
 __pycache__/
 build/
+release/
 Compiler/build/
 Compiler/test.vp
 *.exe
 !Compiler/dist/vamp.exe
 *.manifest
+*.pdb
+*.ilk
+*.obj
+!Examples/**/*.obj
+*.vsix

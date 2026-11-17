@@ -1,0 +1,12 @@
+val name : str = "Vamp"
+val year = 2026
+
+println("Hello from " + name + "!")
+println(f"{name} is ready in {year}.")
+
+func greet(person : str, times : int = 1) : (
+    for (n) in (range(times)) : ( println("Hi " + person) )
+)
+
+greet("Emma")
+greet("Jake", 2)

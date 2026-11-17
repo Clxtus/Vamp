@@ -2,24 +2,72 @@
   "name": "vamp-lang",
   "publisher": "Clxtus",
   "displayName": "Vamp Language Support",
-  "description": "Language support for the Vamp programming language.",
-  "version": "1.0.6",
+  "description": "Syntax highlighting, error checking, completion, formatting, running and debugging for the Vamp programming language.",
+  "icon": "icons/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Clxtus/Vamp"
+  },
+  "bugs": {
+    "url": "https://github.com/Clxtus/Vamp/issues"
+  },
+  "homepage": "https://github.com/Clxtus/Vamp#readme",
+  "keywords": [
+    "vamp",
+    "vp",
+    "vpdata",
+    "language",
+    "compiler"
+  ],
+  "galleryBanner": {
+    "color": "#1a0000",
+    "theme": "dark"
+  },
+  "version": "1.2.1",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Formatters",
+    "Debuggers"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:vamp",
+    "onLanguage:vampdata"
   ],
   "contributes": {
     "languages": [
       {
         "id": "vamp",
-        "aliases": ["Vamp", "vamp"],
-        "extensions": [".vp"],
+        "aliases": [
+          "Vamp",
+          "vamp"
+        ],
+        "extensions": [
+          ".vp"
+        ],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./icons/Vamp.svg",
           "dark": "./icons/Vamp.svg"
+        }
+      },
+      {
+        "id": "vampdata",
+        "aliases": [
+          "Vamp Data",
+          "vpdata"
+        ],
+        "extensions": [
+          ".vpdata"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/Data.svg",
+          "dark": "./icons/Data.svg"
         }
       }
     ],
@@ -28,7 +76,41 @@
         "language": "vamp",
         "scopeName": "source.vamp",
         "path": "./syntaxes/vp.tmLanguage.json"
+      },
+      {
+        "language": "vampdata",
+        "scopeName": "source.vampdata",
+        "path": "./syntaxes/vpdata.tmLanguage.json"
       }
-    ]
+    ],
+    "breakpoints": [
+      {
+        "language": "vamp"
+      }
+    ],
+    "commands": [
+      {
+        "command": "vamp.run",
+        "title": "Vamp: Run File"
+      },
+      {
+        "command": "vamp.test",
+        "title": "Vamp: Run Tests in File"
+      },
+      {
+        "command": "vamp.buildDebug",
+        "title": "Vamp: Build for Debugging"
+      }
+    ],
+    "configuration": {
+      "title": "Vamp",
+      "properties": {
+        "vamp.compiler": {
+          "type": "string",
+          "default": "",
+          "description": "Command that runs the Vamp compiler, for example \"vamp\" or \"python C:/path/Compiler/main.py\". Empty: use Compiler/main.py in the workspace, otherwise vamp on the PATH."
+        }
+      }
+    }
   }
 }

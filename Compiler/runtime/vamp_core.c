@@ -2,6 +2,7 @@
 #include "vamp_runtime.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <math.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -48,7 +49,7 @@ void vamp_try_pop(void) {
 }
 
 const char *vamp_error_message(void) {
-    return vamp_last_error ? vamp_last_error : "";
+    return vamp_string_copy(vamp_last_error ? vamp_last_error : "");
 }
 
 void vamp_keep(void *address) {
@@ -59,7 +60,14 @@ void vamp_keep(void *address) {
    no frame means uncaught -> print + exit(1) */
 void vamp_throw(const char *message) {
     VampTryFrame *frame = vamp_try_top;
-    char *copy = vamp_string_copy(message ? message : "");
+    const char *text = message ? message : "";
+    size_t length = strlen(text);
+    char *copy = (char *)malloc(length + 1);
+    if (!copy) {
+        fprintf(stderr, "Error: out of memory\n");
+        exit(1);
+    }
+    memcpy(copy, text, length + 1);
     free(vamp_last_error);
     vamp_last_error = copy;
     if (!frame) {
@@ -86,19 +94,16 @@ void vamp_throw_format(const char *format, ...) {
 }
 
 static void *vamp_allocate(size_t size) {
-    void *memory = malloc(size ? size : 1);
-    if (!memory) {
-        vamp_throw("out of memory");
-    }
-    return memory;
+    return vamp_gc_alloc(size);
+}
+
+/* NB not zeroed, always terminate the string yourself */
+static char *vamp_allocate_text(size_t size) {
+    return (char *)vamp_gc_alloc_atomic(size);
 }
 
 char *vamp_string_copy_length(const char *text, size_t length) {
-    char *copy = (char *)malloc(length + 1);
-    if (!copy) {
-        fprintf(stderr, "Error: out of memory\n");
-        exit(1);
-    }
+    char *copy = vamp_allocate_text(length + 1);
     if (length) {
         memcpy(copy, text, length);
     }
@@ -111,7 +116,11 @@ char *vamp_string_copy(const char *text) {
 }
 
 int32_t vamp_str_length(const char *text) {
-    return (int32_t)strlen(text);
+    size_t length = strlen(text);
+    if (length > INT32_MAX) {
+        vamp_throw("the string is longer than 2147483647 bytes");
+    }
+    return (int32_t)length;
 }
 
 int32_t vamp_str_at(const char *text, int32_t index) {
@@ -200,7 +209,7 @@ char *vamp_str_replace(const char *text, const char *from, const char *to) {
     for (cursor = strstr(text, from); cursor; cursor = strstr(cursor + from_length, from)) {
         count++;
     }
-    result = (char *)vamp_allocate(strlen(text) + count * to_length - count * from_length + 1);
+    result = vamp_allocate_text(strlen(text) + count * to_length - count * from_length + 1);
     output = result;
     cursor = text;
     for (;;) {
@@ -224,7 +233,7 @@ char *vamp_str_repeat(const char *text, int32_t count) {
     if (count < 0) {
         count = 0;
     }
-    result = (char *)vamp_allocate(length * (size_t)count + 1);
+    result = vamp_allocate_text(length * (size_t)count + 1);
     for (int32_t index = 0; index < count; index++) {
         memcpy(result + (size_t)index * length, text, length);
     }
@@ -234,9 +243,15 @@ char *vamp_str_repeat(const char *text, int32_t count) {
 
 char *vamp_str_reverse(const char *text) {
     size_t length = strlen(text);
-    char *result = (char *)vamp_allocate(length + 1);
-    for (size_t index = 0; index < length; index++) {
-        result[index] = text[length - 1 - index];
+    char *result = vamp_allocate_text(length + 1);
+    size_t index = 0;
+    while (index < length) {
+        size_t size = 1;
+        while (index + size < length && ((unsigned char)text[index + size] & 0xC0) == 0x80) {
+            size++;
+        }
+        memcpy(result + length - index - size, text + index, size);
+        index += size;
     }
     result[length] = 0;
     return result;
@@ -272,7 +287,7 @@ char *vamp_str_join(VampList *parts, const char *separator) {
     for (int32_t index = 0; index < parts->length; index++) {
         total += strlen(((char **)parts->data)[index]) + (index ? separator_length : 0);
     }
-    result = (char *)vamp_allocate(total);
+    result = vamp_allocate_text(total);
     output = result;
     for (int32_t index = 0; index < parts->length; index++) {
         const char *part = ((char **)parts->data)[index];
@@ -288,9 +303,35 @@ char *vamp_str_join(VampList *parts, const char *separator) {
     return result;
 }
 
+static const char *vamp_number_end(const char *end) {
+    while (*end && isspace((unsigned char)*end)) {
+        end++;
+    }
+    return end;
+}
+
 /* strict on purpose, int("abc") used to silently give 0 */
 int64_t vamp_str_to_i64(const char *text) {
-    return strtoll(text, NULL, 10);
+    char *end = NULL;
+    long long value;
+    errno = 0;
+    value = strtoll(text, &end, 10);
+    if (end == text || *vamp_number_end(end)) {
+        vamp_throw_format("cannot convert \"%.60s\" to int", text);
+    }
+    if (errno == ERANGE) {
+        vamp_throw_format("\"%.60s\" is too large for int", text);
+    }
+    return value;
+}
+
+double vamp_str_to_f64(const char *text) {
+    char *end = NULL;
+    double value = strtod(text, &end);
+    if (end == text || *vamp_number_end(end)) {
+        vamp_throw_format("cannot convert \"%.60s\" to float", text);
+    }
+    return value;
 }
 
 int32_t vamp_str_is_number(const char *text) {
@@ -327,24 +368,28 @@ VampList *vamp_list_new(int32_t element_size, int32_t capacity) {
     return list;
 }
 
-static void vamp_list_reserve(VampList *list, int32_t needed) {
+/* int64 math on purpose: capacity * 2 overflowed int32 past ~1B items */
+static void vamp_list_reserve(VampList *list, int64_t needed) {
     if (needed > list->capacity) {
-        int32_t capacity = list->capacity * 2;
+        int64_t capacity = (int64_t)list->capacity * 2;
         char *data;
+        if (needed > INT32_MAX) {
+            vamp_throw("a list cannot hold more than 2147483647 values");
+        }
+        if (capacity > INT32_MAX) {
+            capacity = INT32_MAX;
+        }
         if (capacity < needed) {
             capacity = needed;
         }
-        data = (char *)realloc(list->data, (size_t)capacity * (size_t)list->element_size);
-        if (!data) {
-            vamp_throw("out of memory while growing a list");
-        }
+        data = (char *)vamp_gc_realloc(list->data, (size_t)capacity * (size_t)list->element_size);
         list->data = data;
-        list->capacity = capacity;
+        list->capacity = (int32_t)capacity;
     }
 }
 
 char *vamp_list_push_slot(VampList *list) {
-    vamp_list_reserve(list, list->length + 1);
+    vamp_list_reserve(list, (int64_t)list->length + 1);
     list->length++;
     return list->data + (size_t)(list->length - 1) * (size_t)list->element_size;
 }
@@ -420,7 +465,7 @@ void vamp_list_reverse(VampList *list) {
         memcpy(list->data + (size_t)low * size, list->data + (size_t)high * size, size);
         memcpy(list->data + (size_t)high * size, scratch, size);
     }
-    free(scratch);
+    vamp_free(scratch);
 }
 
 VampList *vamp_list_copy(VampList *list) {
@@ -432,8 +477,8 @@ VampList *vamp_list_copy(VampList *list) {
 
 void vamp_list_free(VampList *list) {
     if (list) {
-        free(list->data);
-        free(list);
+        vamp_free(list->data);
+        vamp_free(list);
     }
 }
 
@@ -494,12 +539,9 @@ VampMap *vamp_map_new(int32_t string_keys, int32_t value_size) {
     map->value_size = value_size;
     map->string_keys = string_keys;
     map->bucket_count = 16;
-    map->buckets = (int32_t *)calloc((size_t)map->bucket_count, sizeof(int32_t));
+    map->buckets = (int32_t *)vamp_gc_alloc((size_t)map->bucket_count * sizeof(int32_t));
     map->entries = (VampMapEntry *)vamp_allocate(sizeof(VampMapEntry) * (size_t)map->entry_capacity);
     map->values = (char *)vamp_allocate((size_t)value_size * (size_t)map->entry_capacity);
-    if (!map->buckets) {
-        vamp_throw("out of memory");
-    }
     return map;
 }
 
@@ -529,11 +571,9 @@ static int32_t vamp_map_lookup(const VampMap *map, uint64_t hash, const char *st
 static void vamp_map_rebuild(VampMap *map, int32_t bucket_count) {
     int32_t write = 0;
     uint32_t mask;
-    free(map->buckets);
-    map->buckets = (int32_t *)calloc((size_t)bucket_count, sizeof(int32_t));
-    if (!map->buckets) {
-        vamp_throw("out of memory while growing a map");
-    }
+    vamp_free(map->buckets);
+    map->buckets = (int32_t *)vamp_gc_alloc_atomic((size_t)bucket_count * sizeof(int32_t));
+    memset(map->buckets, 0, (size_t)bucket_count * sizeof(int32_t));
     map->bucket_count = bucket_count;
     mask = (uint32_t)bucket_count - 1;
     for (int32_t read = 0; read < map->entry_count; read++) {
@@ -573,12 +613,13 @@ static char *vamp_map_slot(VampMap *map, uint64_t hash, const char *string_key, 
         vamp_map_rebuild(map, map->length * 4 >= map->bucket_count ? map->bucket_count * 2 : map->bucket_count);
     }
     if (map->entry_count == map->entry_capacity) {
-        int32_t capacity = map->entry_capacity * 2;
-        VampMapEntry *entries = (VampMapEntry *)realloc(map->entries, sizeof(VampMapEntry) * (size_t)capacity);
-        char *values = (char *)realloc(map->values, (size_t)map->value_size * (size_t)capacity);
-        if (!entries || !values) {
-            vamp_throw("out of memory while growing a map");
+        int32_t capacity;
+        if (map->entry_capacity >= 0x20000000) {
+            vamp_throw("a map or set cannot hold more than 536870912 entries");
         }
+        capacity = map->entry_capacity * 2;
+        VampMapEntry *entries = (VampMapEntry *)vamp_gc_realloc(map->entries, sizeof(VampMapEntry) * (size_t)capacity);
+        char *values = (char *)vamp_gc_realloc(map->values, (size_t)map->value_size * (size_t)capacity);
         map->entries = entries;
         map->values = values;
         map->entry_capacity = capacity;
@@ -627,7 +668,7 @@ static int32_t vamp_map_remove(VampMap *map, uint64_t hash, const char *string_k
         if (slot > 0 && vamp_map_key_equal(map, &map->entries[slot - 1], hash, string_key, integer_key)) {
             map->buckets[position] = -1;
             map->entries[slot - 1].used = 0;
-            free(map->entries[slot - 1].string_key);
+            vamp_free(map->entries[slot - 1].string_key);
             map->entries[slot - 1].string_key = NULL;
             map->length--;
             return 1;
@@ -650,7 +691,8 @@ int32_t vamp_map_length(VampMap *map) {
 
 void vamp_map_clear(VampMap *map) {
     for (int32_t index = 0; index < map->entry_count; index++) {
-        free(map->entries[index].string_key);
+        vamp_free(map->entries[index].string_key);
+        map->entries[index].string_key = NULL;
     }
     memset(map->buckets, 0, sizeof(int32_t) * (size_t)map->bucket_count);
     map->entry_count = 0;
@@ -681,23 +723,23 @@ char *vamp_map_value_at(VampMap *map, int32_t index) {
 void vamp_map_free(VampMap *map) {
     if (map) {
         vamp_map_clear(map);
-        free(map->buckets);
-        free(map->entries);
-        free(map->values);
-        free(map);
+        vamp_free(map->buckets);
+        vamp_free(map->entries);
+        vamp_free(map->values);
+        vamp_free(map);
     }
 }
 
 char *vamp_console_read_line(void) {
     size_t capacity = 128;
     size_t length = 0;
-    char *line = (char *)vamp_allocate(capacity);
+    char *line = vamp_allocate_text(capacity);
     int character;
     fflush(stdout);
     while ((character = getchar()) != EOF && character != '\n') {
         if (length + 1 >= capacity) {
             capacity *= 2;
-            line = (char *)realloc(line, capacity);
+            line = (char *)vamp_gc_realloc(line, capacity);
             if (!line) {
                 vamp_throw("out of memory while reading a line");
             }
@@ -714,14 +756,14 @@ char *vamp_console_read_line(void) {
 int64_t vamp_console_read_int(void) {
     char *line = vamp_console_read_line();
     int64_t value = (int64_t)strtoll(line, NULL, 10);
-    free(line);
+    vamp_free(line);
     return value;
 }
 
 double vamp_console_read_float(void) {
     char *line = vamp_console_read_line();
     double value = strtod(line, NULL);
-    free(line);
+    vamp_free(line);
     return value;
 }
 
@@ -784,7 +826,7 @@ char *vamp_file_read_text(const char *path) {
     fseek(file, 0, SEEK_END);
     size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    text = (char *)vamp_allocate((size_t)size + 1);
+    text = vamp_allocate_text((size_t)size + 1);
     read = fread(text, 1, (size_t)size, file);
     text[read] = 0;
     fclose(file);
@@ -835,7 +877,7 @@ int32_t vamp_file_copy(const char *from, const char *to) {
 #else
     char *text = vamp_file_read_text(from);
     int32_t ok = vamp_file_write_text(to, text);
-    free(text);
+    vamp_free(text);
     return ok;
 #endif
 }
@@ -871,7 +913,7 @@ VampList *vamp_file_read_lines(const char *path) {
         }
         cursor = end + 1;
     }
-    free(text);
+    vamp_free(text);
     return lines;
 }
 
@@ -1044,4 +1086,476 @@ VampList *vamp_map_values(VampMap *map) {
         }
     }
     return values;
+}
+
+char *vamp_str_concat_n(int32_t count, const char **parts) {
+    size_t total = 0;
+    size_t offset = 0;
+    char *result;
+    for (int32_t index = 0; index < count; index++) {
+        total += strlen(parts[index]);
+    }
+    result = vamp_allocate_text(total + 1);
+    for (int32_t index = 0; index < count; index++) {
+        size_t length = strlen(parts[index]);
+        memcpy(result + offset, parts[index], length);
+        offset += length;
+    }
+    result[total] = 0;
+    return result;
+}
+
+char *vamp_format_float(double value, int32_t precision) {
+    char buffer[400];
+    if (precision < 0) {
+        snprintf(buffer, sizeof(buffer), "%f", value);
+    } else {
+        snprintf(buffer, sizeof(buffer), "%.*f", precision > 60 ? 60 : precision, value);
+    }
+    return vamp_string_copy(buffer);
+}
+
+char *vamp_str_pad(const char *text, int32_t width, int32_t align) {
+    size_t length = strlen(text);
+    size_t padding;
+    size_t before;
+    char *result;
+    if (width <= 0 || (size_t)width <= length) {
+        return vamp_string_copy(text);
+    }
+    padding = (size_t)width - length;
+    before = align == 1 ? padding : align == 2 ? padding / 2 : 0;
+    result = vamp_allocate_text((size_t)width + 1);
+    memset(result, ' ', (size_t)width);
+    memcpy(result + before, text, length);
+    result[width] = 0;
+    return result;
+}
+
+static void vamp_slice_bounds(int64_t length, int64_t *start, int64_t *end) {
+    if (*start < 0) {
+        *start += length;
+    }
+    if (*end < 0) {
+        *end += length;
+    }
+    if (*start < 0) {
+        *start = 0;
+    }
+    if (*start > length) {
+        *start = length;
+    }
+    if (*end < 0) {
+        *end = 0;
+    }
+    if (*end > length) {
+        *end = length;
+    }
+    if (*end < *start) {
+        *end = *start;
+    }
+}
+
+VampList *vamp_list_slice(VampList *list, int64_t start, int64_t end) {
+    VampList *result;
+    vamp_slice_bounds(list->length, &start, &end);
+    result = vamp_list_new(list->element_size, (int32_t)(end - start));
+    memcpy(result->data, list->data + (size_t)start * (size_t)list->element_size,
+           (size_t)(end - start) * (size_t)list->element_size);
+    result->length = (int32_t)(end - start);
+    return result;
+}
+
+char *vamp_str_slice(const char *text, int64_t start, int64_t end) {
+    vamp_slice_bounds((int64_t)strlen(text), &start, &end);
+    return vamp_string_copy_length(text + start, (size_t)(end - start));
+}
+
+static void vamp_map_copy_entry(VampMap *target, VampMap *source, int32_t index) {
+    VampMapEntry *entry = &source->entries[index];
+    char *slot = vamp_map_slot(target, entry->hash, entry->string_key, entry->integer_key, 1);
+    memcpy(slot, source->values + (size_t)index * (size_t)source->value_size, (size_t)source->value_size);
+}
+
+static int vamp_map_contains_entry(VampMap *map, VampMapEntry *entry) {
+    return vamp_map_lookup(map, entry->hash, entry->string_key, entry->integer_key) >= 0;
+}
+
+VampMap *vamp_set_union(VampMap *left, VampMap *right) {
+    VampMap *result = vamp_map_new(left->string_keys, left->value_size);
+    for (int32_t index = 0; index < left->entry_count; index++) {
+        if (left->entries[index].used) {
+            vamp_map_copy_entry(result, left, index);
+        }
+    }
+    for (int32_t index = 0; index < right->entry_count; index++) {
+        if (right->entries[index].used) {
+            vamp_map_copy_entry(result, right, index);
+        }
+    }
+    return result;
+}
+
+VampMap *vamp_set_intersection(VampMap *left, VampMap *right) {
+    VampMap *result = vamp_map_new(left->string_keys, left->value_size);
+    for (int32_t index = 0; index < left->entry_count; index++) {
+        if (left->entries[index].used && vamp_map_contains_entry(right, &left->entries[index])) {
+            vamp_map_copy_entry(result, left, index);
+        }
+    }
+    return result;
+}
+
+VampMap *vamp_set_difference(VampMap *left, VampMap *right) {
+    VampMap *result = vamp_map_new(left->string_keys, left->value_size);
+    for (int32_t index = 0; index < left->entry_count; index++) {
+        if (left->entries[index].used && !vamp_map_contains_entry(right, &left->entries[index])) {
+            vamp_map_copy_entry(result, left, index);
+        }
+    }
+    return result;
+}
+
+int32_t vamp_set_is_subset(VampMap *left, VampMap *right) {
+    for (int32_t index = 0; index < left->entry_count; index++) {
+        if (left->entries[index].used && !vamp_map_contains_entry(right, &left->entries[index])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+VampMap *vamp_map_copy(VampMap *map) {
+    VampMap *result = vamp_map_new(map->string_keys, map->value_size);
+    for (int32_t index = 0; index < map->entry_count; index++) {
+        if (map->entries[index].used) {
+            vamp_map_copy_entry(result, map, index);
+        }
+    }
+    return result;
+}
+
+typedef int32_t (*VampLess)(void *closure, const char *left, const char *right);
+
+static void vamp_merge_sort(char *data, char *scratch, int32_t count, size_t size, void *closure, VampLess less) {
+    int32_t middle;
+    int32_t left;
+    int32_t right;
+    int32_t out = 0;
+    if (count < 2) {
+        return;
+    }
+    middle = count / 2;
+    vamp_merge_sort(data, scratch, middle, size, closure, less);
+    vamp_merge_sort(data + (size_t)middle * size, scratch, count - middle, size, closure, less);
+    left = 0;
+    right = middle;
+    while (left < middle && right < count) {
+        if (less(closure, data + (size_t)right * size, data + (size_t)left * size)) {
+            memcpy(scratch + (size_t)out++ * size, data + (size_t)right++ * size, size);
+        } else {
+            memcpy(scratch + (size_t)out++ * size, data + (size_t)left++ * size, size);
+        }
+    }
+    while (left < middle) {
+        memcpy(scratch + (size_t)out++ * size, data + (size_t)left++ * size, size);
+    }
+    while (right < count) {
+        memcpy(scratch + (size_t)out++ * size, data + (size_t)right++ * size, size);
+    }
+    memcpy(data, scratch, (size_t)count * size);
+}
+
+void vamp_list_sort_with(VampList *list, void *closure, void *less) {
+    char *scratch;
+    if (list->length < 2) {
+        return;
+    }
+    scratch = (char *)vamp_allocate((size_t)list->length * (size_t)list->element_size);
+    vamp_merge_sort(list->data, scratch, list->length, (size_t)list->element_size, closure, (VampLess)less);
+    vamp_free(scratch);
+}
+
+char *vamp_str_from_u64(uint64_t value) {
+    char digits[24];
+    int count = 0;
+    char *text;
+    do {
+        digits[count++] = (char)('0' + value % 10);
+        value /= 10;
+    } while (value);
+    text = vamp_allocate_text((size_t)count + 1);
+    for (int index = 0; index < count; index++) {
+        text[index] = digits[count - 1 - index];
+    }
+    text[count] = 0;
+    return text;
+}
+
+char *vamp_str_from_i64(int64_t value) {
+    char *text;
+    size_t length;
+    if (value >= 0) {
+        return vamp_str_from_u64((uint64_t)value);
+    }
+    text = vamp_str_from_u64(0 - (uint64_t)value);
+    length = strlen(text);
+    {
+        char *signed_text = vamp_allocate_text(length + 2);
+        signed_text[0] = '-';
+        memcpy(signed_text + 1, text, length);
+        signed_text[length + 1] = 0;
+        vamp_free(text);
+        return signed_text;
+    }
+}
+
+char *vamp_str_concat2(const char *left, const char *right) {
+    size_t left_length = strlen(left);
+    size_t right_length = strlen(right);
+    char *text = vamp_allocate_text(left_length + right_length + 1);
+    memcpy(text, left, left_length);
+    memcpy(text + left_length, right, right_length);
+    text[left_length + right_length] = 0;
+    return text;
+}
+
+static struct tm vamp_local_time(int64_t timestamp) {
+    time_t value = (time_t)timestamp;
+    struct tm parts;
+#ifdef _WIN32
+    localtime_s(&parts, &value);
+#else
+    localtime_r(&value, &parts);
+#endif
+    return parts;
+}
+
+int64_t vamp_time_make(int32_t year, int32_t month, int32_t day, int32_t hour, int32_t minute, int32_t second) {
+    struct tm parts;
+    memset(&parts, 0, sizeof(parts));
+    parts.tm_year = year - 1900;
+    parts.tm_mon = month - 1;
+    parts.tm_mday = day;
+    parts.tm_hour = hour;
+    parts.tm_min = minute;
+    parts.tm_sec = second;
+    parts.tm_isdst = -1;
+    return (int64_t)mktime(&parts);
+}
+
+int64_t vamp_time_make_date(int32_t year, int32_t month, int32_t day) {
+    return vamp_time_make(year, month, day, 0, 0, 0);
+}
+
+int32_t vamp_time_part_of(int32_t part, int64_t timestamp) {
+    struct tm parts = vamp_local_time(timestamp);
+    switch (part) {
+    case 0: return parts.tm_year + 1900;
+    case 1: return parts.tm_mon + 1;
+    case 2: return parts.tm_mday;
+    case 3: return parts.tm_hour;
+    case 4: return parts.tm_min;
+    case 5: return parts.tm_sec;
+    default: return parts.tm_wday;
+    }
+}
+
+char *vamp_time_format_time(int64_t timestamp, const char *pattern) {
+    struct tm parts = vamp_local_time(timestamp);
+    char buffer[512];
+    size_t length = strftime(buffer, sizeof(buffer), pattern, &parts);
+    return vamp_string_copy_length(buffer, length);
+}
+
+int64_t vamp_time_add_days(int64_t timestamp, int64_t days) {
+    struct tm parts = vamp_local_time(timestamp);
+    parts.tm_mday += (int)days;
+    parts.tm_isdst = -1;
+    return (int64_t)mktime(&parts);
+}
+
+static int64_t vamp_day_start(int64_t timestamp) {
+    struct tm parts = vamp_local_time(timestamp);
+    parts.tm_hour = 12;
+    parts.tm_min = 0;
+    parts.tm_sec = 0;
+    parts.tm_isdst = -1;
+    return (int64_t)mktime(&parts);
+}
+
+int64_t vamp_time_days_between(int64_t from, int64_t to) {
+    double difference = (double)(vamp_day_start(to) - vamp_day_start(from)) / 86400.0;
+    return (int64_t)(difference < 0 ? difference - 0.5 : difference + 0.5);
+}
+
+static int vamp_read_number(const char **cursor, int digits, int *value) {
+    int count = 0;
+    *value = 0;
+    while (count < digits && isdigit((unsigned char)**cursor)) {
+        *value = *value * 10 + (*(*cursor)++ - '0');
+        count++;
+    }
+    return count > 0;
+}
+
+int64_t vamp_time_parse(const char *text, const char *pattern) {
+    int year = 1970, month = 1, day = 1, hour = 0, minute = 0, second = 0;
+    const char *cursor = text;
+    for (const char *format = pattern; *format; format++) {
+        int ok = 1;
+        if (*format == '%' && format[1]) {
+            format++;
+            switch (*format) {
+            case 'Y': ok = vamp_read_number(&cursor, 4, &year); break;
+            case 'm': ok = vamp_read_number(&cursor, 2, &month); break;
+            case 'd': ok = vamp_read_number(&cursor, 2, &day); break;
+            case 'H': ok = vamp_read_number(&cursor, 2, &hour); break;
+            case 'M': ok = vamp_read_number(&cursor, 2, &minute); break;
+            case 'S': ok = vamp_read_number(&cursor, 2, &second); break;
+            case '%': ok = *cursor == '%'; cursor += ok; break;
+            default:
+                vamp_throw_format("time.Parse understands %%Y %%m %%d %%H %%M %%S, not %%%c", *format);
+            }
+        } else {
+            ok = *cursor == *format;
+            cursor += ok;
+        }
+        if (!ok) {
+            vamp_throw_format("\"%s\" does not match the time pattern \"%s\"", text, pattern);
+        }
+    }
+    if (*cursor) {
+        vamp_throw_format("\"%s\" has extra text after the time pattern \"%s\"", text, pattern);
+    }
+    return vamp_time_make(year, month, day, hour, minute, second);
+}
+
+typedef struct {
+    char *data;
+    int64_t length;
+    int64_t capacity;
+} VampBuilder;
+
+void *vamp_builder_new(void) {
+    VampBuilder *builder = (VampBuilder *)vamp_gc_alloc(sizeof(VampBuilder));
+    builder->capacity = 64;
+    builder->data = vamp_allocate_text(64);
+    builder->data[0] = 0;
+    return builder;
+}
+
+void vamp_builder_add(void *handle, const char *text) {
+    VampBuilder *builder = (VampBuilder *)handle;
+    size_t length = strlen(text);
+    if (builder->length + (int64_t)length + 1 > builder->capacity) {
+        int64_t capacity = builder->capacity * 2;
+        while (capacity < builder->length + (int64_t)length + 1) {
+            capacity *= 2;
+        }
+        builder->data = (char *)vamp_gc_realloc(builder->data, (size_t)capacity);
+        builder->capacity = capacity;
+    }
+    memcpy(builder->data + builder->length, text, length);
+    builder->length += (int64_t)length;
+    builder->data[builder->length] = 0;
+}
+
+char *vamp_builder_text(void *handle) {
+    VampBuilder *builder = (VampBuilder *)handle;
+    return vamp_string_copy_length(builder->data, (size_t)builder->length);
+}
+
+int64_t vamp_builder_length(void *handle) {
+    return ((VampBuilder *)handle)->length;
+}
+
+void vamp_builder_clear(void *handle) {
+    VampBuilder *builder = (VampBuilder *)handle;
+    builder->length = 0;
+    builder->data[0] = 0;
+}
+
+static int vamp_utf8_length(unsigned char lead) {
+    if (lead < 0x80) return 1;
+    if ((lead & 0xE0) == 0xC0) return 2;
+    if ((lead & 0xF0) == 0xE0) return 3;
+    if ((lead & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+
+static size_t vamp_utf8_step(const char *text, size_t position, size_t length) {
+    size_t width = (size_t)vamp_utf8_length((unsigned char)text[position]);
+    for (size_t index = 1; index < width; index++) {
+        if (position + index >= length || ((unsigned char)text[position + index] & 0xC0) != 0x80) {
+            return 1;
+        }
+    }
+    return width;
+}
+
+int32_t vamp_str_char_count(const char *text) {
+    size_t length = strlen(text);
+    int32_t count = 0;
+    for (size_t position = 0; position < length; position += vamp_utf8_step(text, position, length)) {
+        count++;
+    }
+    return count;
+}
+
+VampList *vamp_str_chars(const char *text) {
+    size_t length = strlen(text);
+    VampList *list = vamp_list_new((int32_t)sizeof(char *), 8);
+    for (size_t position = 0; position < length;) {
+        size_t width = vamp_utf8_step(text, position, length);
+        char *piece = vamp_string_copy_length(text + position, width);
+        memcpy(vamp_list_push_slot(list), &piece, sizeof(char *));
+        position += width;
+    }
+    return list;
+}
+
+VampList *vamp_str_code_points(const char *text) {
+    size_t length = strlen(text);
+    VampList *list = vamp_list_new((int32_t)sizeof(int64_t), 8);
+    for (size_t position = 0; position < length;) {
+        size_t width = vamp_utf8_step(text, position, length);
+        const unsigned char *bytes = (const unsigned char *)text + position;
+        int64_t code = width == 1 ? bytes[0]
+                     : width == 2 ? ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F)
+                     : width == 3 ? ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) | (bytes[2] & 0x3F)
+                     : ((int64_t)(bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) | ((bytes[2] & 0x3F) << 6) |
+                       (bytes[3] & 0x3F);
+        memcpy(vamp_list_push_slot(list), &code, sizeof(int64_t));
+        position += width;
+    }
+    return list;
+}
+
+char *vamp_str_from_code(int64_t code) {
+    char bytes[4];
+    size_t length;
+    if (code < 0 || code > 0x10FFFF) {
+        vamp_throw_format("%lld is not a Unicode code point", (long long)code);
+    }
+    if (code < 0x80) {
+        bytes[0] = (char)code;
+        length = 1;
+    } else if (code < 0x800) {
+        bytes[0] = (char)(0xC0 | (code >> 6));
+        bytes[1] = (char)(0x80 | (code & 0x3F));
+        length = 2;
+    } else if (code < 0x10000) {
+        bytes[0] = (char)(0xE0 | (code >> 12));
+        bytes[1] = (char)(0x80 | ((code >> 6) & 0x3F));
+        bytes[2] = (char)(0x80 | (code & 0x3F));
+        length = 3;
+    } else {
+        bytes[0] = (char)(0xF0 | (code >> 18));
+        bytes[1] = (char)(0x80 | ((code >> 12) & 0x3F));
+        bytes[2] = (char)(0x80 | ((code >> 6) & 0x3F));
+        bytes[3] = (char)(0x80 | (code & 0x3F));
+        length = 4;
+    }
+    return vamp_string_copy_length(bytes, length);
 }

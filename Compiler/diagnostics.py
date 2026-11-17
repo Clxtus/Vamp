@@ -30,6 +30,12 @@ def build_message(message, filename=None, line=0, column=0, source_lines=None, w
 def make_error(kind, message, filename=None, line=0, column=0, source_lines=None, width=1, hint=None):
     error = kind(build_message(message, filename, line, column, source_lines, width, hint))
     error.vamp_located = True
+    error.vamp_file = filename
+    error.vamp_line = line
+    error.vamp_column = column
+    error.vamp_width = width
+    error.vamp_message = message
+    error.vamp_hint = hint
     return error
 
 

@@ -3,7 +3,7 @@ import re
 
 from diagnostics import make_error, suggest, describe_choices
 from lexer import tokenize
-from libraries import BUILTIN_LIBRARIES, NATIVE_EXTENSIONS, SOURCE_EXTENSIONS
+from libraries import BUILTIN_LIBRARIES, DATA_EXTENSIONS, NATIVE_EXTENSIONS, SOURCE_EXTENSIONS
 import native
 
 
@@ -244,11 +244,73 @@ class TryNode(ASTNode):
         self.error_name = error_name
         self.catch_body = catch_body
 
+class TupleNode(ASTNode):
+    def __init__(self, elements):
+        self.elements = elements
+
+
+class FormatStringNode(ASTNode):
+    def __init__(self, parts):
+        self.parts = parts
+
+
+class ConditionalNode(ASTNode):
+    def __init__(self, condition, when_true, when_false):
+        self.condition = condition
+        self.when_true = when_true
+        self.when_false = when_false
+
+
+class SliceNode(ASTNode):
+    def __init__(self, target, start, end):
+        self.target = target
+        self.start = start
+        self.end = end
+
+
+class SetLiteralNode(ASTNode):
+    def __init__(self, elements):
+        self.elements = elements
+
+
+class LambdaNode(ASTNode):
+    def __init__(self, parameters, return_type, body):
+        self.parameters = parameters
+        self.return_type = return_type
+        self.body = body
+
+
+class CallValueNode(ASTNode):
+    def __init__(self, callee, arguments):
+        self.callee = callee
+        self.arguments = arguments
+
+
 class ThrowNode(ASTNode):
     def __init__(self, expression):
         self.expression = expression
 
+
+class GenericCallNode(ASTNode):
+    def __init__(self, name, type_arguments, arguments):
+        self.name = name
+        self.type_arguments = type_arguments
+        self.arguments = arguments
+
+
+class TestNode(ASTNode):
+    def __init__(self, name, body):
+        self.name = name
+        self.body = body
+
+
+class InterfaceDeclarationNode(ASTNode):
+    def __init__(self, interface_name, methods):
+        self.interface_name = interface_name
+        self.methods = methods
+
 ASSIGNMENT_OPERATORS = ("=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=")
+OPERATOR_METHODS = ("+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=")
 MAP_KEY_TYPES = ("str", "char", "int", "i8", "i16", "i32", "u8", "u16", "u32", "u64")
 TYPE_ALIASES = {"i64": "int", "double": "float"}
 CHAR_ESCAPES = {"n": 10, "t": 9, "r": 13, "0": 0, "\\": 92, "'": 39}
@@ -318,6 +380,7 @@ class ModuleInfo:
         self.path = path
         self.functions = {}
         self.classes = set()
+        self.constants = {}
         self.statements = []
         self.is_native = False
 
@@ -328,6 +391,7 @@ class ParseSession:
         self.modules = {}
         self.module_ids = set()
         self.class_origins = {}
+        self.generic_names = set()
 
 
 STATEMENT_DESCRIPTIONS = {
@@ -494,6 +558,12 @@ class Parser:
                     ret_ty = self.parse_type("a return type after ':'")
                     self.consume("LPAREN")
                     expr = self.parse_expression()
+                    if self.peek() and self.peek().kind == "COMMA":
+                        elems = [expr]
+                        while self.peek() and self.peek().kind == "COMMA":
+                            self.consume("COMMA")
+                            elems.append(self.parse_expression())
+                        expr = TupleNode(elems)
                     self.consume("RPAREN")
             else:
                 expr = self.parse_expression()
@@ -516,6 +586,14 @@ class Parser:
                     return self.parse_enum_declaration()
                 if word == "struct" and next_token is not None and next_token.kind == "IDENTIFIER":
                     return self.parse_class_declaration(is_struct=True)
+                if word == "interface" and next_token is not None and next_token.kind == "IDENTIFIER":
+                    return self.parse_interface_declaration()
+                if word == "test" and next_token is not None and next_token.kind == "STRING_LITERAL":
+                    self.require_top_level(top_level, current_token)
+                    self.consume("IDENTIFIER")
+                    name = unescape_string(self.consume("STRING_LITERAL").text[1:-1])
+                    self.consume("COLON")
+                    return TestNode(name, self.parse_block())
                 if word == "try" and next_token is not None and next_token.kind == "COLON":
                     return self.parse_try_statement()
                 if word == "throw" and next_token is not None and next_token.kind == "LPAREN":
@@ -529,7 +607,10 @@ class Parser:
                 saved_position = self.position
                 array = VariableAccessNode(self.consume("IDENTIFIER").text)
                 self.consume("LBRACKET")
-                idx = self.parse_expression()
+                idx = None if self.peek() and self.peek().kind == "COLON" else self.parse_expression()
+                if idx is None or (self.peek() and self.peek().kind == "COLON"):
+                    self.position = saved_position
+                    return self.parse_target_statement()
                 self.consume("RBRACKET")
                 if (
                     self.peek()
@@ -626,6 +707,14 @@ class Parser:
         )
 
     def parse_type(self, what="a type"):
+        ty_name = self.parse_base_type(what)
+        while self.peek() is not None and self.peek().kind == "QUESTION":
+            self.consume("QUESTION")
+            if not ty_name.startswith("optional:"):
+                ty_name = "optional:" + ty_name
+        return ty_name
+
+    def parse_base_type(self, what="a type"):
         token = self.peek()
         if token is None:
             raise self.error(f"Unexpected end of input: expected {what}")
@@ -634,12 +723,14 @@ class Parser:
             return TYPE_ALIASES.get(token.text, token.text)
         if token.kind == "IDENTIFIER":
             following = self.tokens[self.position + 1] if self.position + 1 < len(self.tokens) else None
-            if token.text in ("list", "map") and following is not None and following.kind == "LBRACKET":
+            if token.text in ("list", "map", "set") and following is not None and following.kind == "LBRACKET":
                 self.position += 2
-                if token.text == "list":
-                    elem_ty = self.parse_type("a list element type")
+                if token.text in ("list", "set"):
+                    elem_ty = self.parse_type(f"a {token.text} element type")
                     self.consume("RBRACKET")
-                    return f"list:{elem_ty}"
+                    if token.text == "set" and elem_ty not in MAP_KEY_TYPES:
+                        raise self.error("Set values must be str, char or an integer type", token)
+                    return f"{token.text}:{elem_ty}"
                 key_token = self.peek()
                 key_ty = self.parse_type("a map key type")
                 if key_ty not in MAP_KEY_TYPES:
@@ -648,16 +739,78 @@ class Parser:
                 val_ty = self.parse_type("a map value type")
                 self.consume("RBRACKET")
                 return f"map:{key_ty}:{val_ty}"
+            if token.text == "func" and following is not None and following.kind == "LPAREN":
+                return self.parse_function_type()
             self.position += 1
             if token.text == "json":
                 return "json"
-            return f"named:{token.text}"
+            name = token.text
+            binding = self.bindings.get(name)
+            if binding is not None and binding.kind == "class":
+                name = binding.target
+            if following is not None and following.kind == "LBRACKET":
+                self.consume("LBRACKET")
+                args = [self.parse_type("a type argument")]
+                while self.peek() and self.peek().kind == "COMMA":
+                    self.consume("COMMA")
+                    args.append(self.parse_type("a type argument"))
+                self.consume("RBRACKET")
+                return f"named:{name}[" + ",".join(args) + "]"
+            return f"named:{name}"
+        if token.kind == "LPAREN":
+            tuple_type = self.parse_tuple_type()
+            if tuple_type is not None:
+                return tuple_type
         raise self.error(
             f"Expected {what}, got {self.describe_token(token)}",
             token,
-            "types are int, float, bool, str, double, char, i8 to i64, u8 to u64, list[T], map[K, V], "
-            "or the name of a class, struct or enum",
+            "types are int, float, bool, str, char, i8 to i64, u8 to u64, list[T], map[K, V], set[T], "
+            "(T, U) tuples, or the name of a class, struct or enum",
         )
+
+    def parse_function_type(self):
+        self.consume("IDENTIFIER", "func")
+        self.consume("LPAREN")
+        params = []
+        while self.peek() and self.peek().kind != "RPAREN":
+            params.append(self.parse_type("a parameter type"))
+            if self.peek() and self.peek().kind == "COMMA":
+                self.consume("COMMA")
+            else:
+                break
+        self.consume("RPAREN")
+        ret_ty = "void"
+        if self.peek() and self.peek().kind == "COLON":
+            following = self.tokens[self.position + 1] if self.position + 1 < len(self.tokens) else None
+            if following is not None and following.kind in ("TYPE", "CAST", "IDENTIFIER"):
+                self.consume("COLON")
+                ret_ty = "void" if self.at_word("void") and self.consume() else self.parse_type("a return type")
+            elif following is not None and following.kind == "LPAREN":
+                saved = self.position
+                self.consume("COLON")
+                tuple_type = self.parse_tuple_type()
+                if tuple_type is None:
+                    self.position = saved
+                else:
+                    ret_ty = tuple_type
+        return "fn[" + ",".join(params) + ";" + ret_ty + "]"
+
+    def parse_tuple_type(self):
+        saved = self.position
+        try:
+            self.consume("LPAREN")
+            elems = [self.parse_type()]
+            while self.peek() and self.peek().kind == "COMMA":
+                self.consume("COMMA")
+                elems.append(self.parse_type())
+            self.consume("RPAREN")
+        except SyntaxError:
+            self.position = saved
+            return None
+        if len(elems) < 2:
+            self.position = saved
+            return None
+        return "tuple[" + ",".join(elems) + "]"
 
     def parse_match_statement(self):
         match_token = self.consume("IDENTIFIER", "match")
@@ -749,11 +902,19 @@ class Parser:
             self.consume("KEYWORD", "class")
         class_token = self.expect_name("a struct name after 'struct'" if is_struct else "a class name after 'class'")
         cls_name = class_token.text
+        type_parameters = self.parse_type_parameters()
+        if type_parameters:
+            self.session.generic_names.add(cls_name)
         parent_name = None
+        parents = []
         if not is_struct and self.peek() and self.peek().kind == "LPAREN":
             self.consume("LPAREN")
-            parent_name = self.expect_name("the name of the class to inherit from").text
+            parents.append(self.expect_name("the name of the class or interface to build on").text)
+            while self.peek() and self.peek().kind == "COMMA":
+                self.consume("COMMA")
+                parents.append(self.expect_name("the name of an interface").text)
             self.consume("RPAREN")
+            parent_name = parents[0]
         previous_origin = self.session.class_origins.get(cls_name)
         if previous_origin is not None and previous_origin[0] != self.filename:
             raise self.error(
@@ -773,9 +934,6 @@ class Parser:
                 nested_classes.append(self.parse_class_declaration())
                 continue
             if self.peek().kind == "IDENTIFIER" and self.peek().text == "func":
-                if is_struct:
-                    raise self.error("A struct can only declare fields", self.peek(),
-                                     "use a class if you need methods")
                 meths.append(self.parse_function_declaration(is_method=True))
                 continue
 
@@ -790,7 +948,53 @@ class Parser:
         self.consume("RPAREN")
         if not fields and not nested_classes and not meths and parent_name is None:
             raise self.error(f"Class '{cls_name}' must declare a field, nested class, or method")
-        return ClassDeclarationNode(cls_name, fields, nested_classes, meths, parent_name, is_struct)
+        node = ClassDeclarationNode(cls_name, fields, nested_classes, meths, parent_name, is_struct)
+        node.parents = parents
+        node.type_parameters = type_parameters
+        return node
+
+    def parse_interface_declaration(self):
+        self.consume("IDENTIFIER", "interface")
+        name_token = self.expect_name("an interface name after 'interface'")
+        previous_origin = self.session.class_origins.get(name_token.text)
+        if previous_origin is not None and previous_origin[0] != self.filename:
+            raise self.error(f"'{name_token.text}' is already declared in {previous_origin[0]}:{previous_origin[1]}",
+                             name_token)
+        self.session.class_origins.setdefault(name_token.text, (self.filename, name_token.line))
+        self.consume("COLON")
+        self.consume("LPAREN")
+        meths = []
+        while self.peek() and self.peek().kind != "RPAREN":
+            func_token = self.consume("IDENTIFIER", "func")
+            method_token = self.peek()
+            if method_token is not None and method_token.kind in ("OPERATOR", "COMPARISON_OPERATOR") \
+                    and method_token.text in OPERATOR_METHODS:
+                self.consume()
+            else:
+                method_token = self.expect_name("a method name after 'func'")
+            self.consume("LPAREN")
+            params = []
+            while self.peek() and self.peek().kind != "RPAREN":
+                parameter_token = self.expect_name("a parameter name")
+                self.consume("COLON")
+                params.append((parameter_token.text, self.parse_type()))
+                if self.peek() and self.peek().kind == "COMMA":
+                    self.consume("COMMA")
+                else:
+                    break
+            self.consume("RPAREN")
+            ret_ty = "void"
+            if self.peek() and self.peek().kind == "COLON":
+                self.consume("COLON")
+                ret_ty = self.parse_type("a return type")
+            if self.peek() and self.peek().kind == "COLON":
+                raise self.error("Methods in an interface have no body", func_token,
+                                 "an interface lists method names and types; classes give the bodies")
+            meths.append((method_token.text, params, ret_ty))
+        self.consume("RPAREN")
+        if not meths:
+            raise self.error(f"Interface '{name_token.text}' must list at least one method", name_token)
+        return InterfaceDeclarationNode(name_token.text, meths)
 
     def parse_assignment_or_class_instance(self):
         var_name = self.consume("IDENTIFIER").text
@@ -862,11 +1066,48 @@ class Parser:
 
     def parse_function_declaration(self, is_method=False):
         self.consume("IDENTIFIER", "func")
-        function_token = self.expect_name("a function name after 'func'")
+        operator_token = self.peek()
+        if is_method and operator_token is not None and operator_token.kind in ("OPERATOR", "COMPARISON_OPERATOR") \
+                and operator_token.text in OPERATOR_METHODS:
+            function_token = self.consume()
+        else:
+            function_token = self.expect_name("a function name after 'func'")
         function_name = function_token.text
         if not is_method:
             self.check_name_not_imported(function_token, "function")
             self.declared_functions[function_name] = function_token
+        type_parameters = self.parse_type_parameters()
+        if type_parameters:
+            self.session.generic_names.add(function_name)
+        params, function_return_type, body, defaults = self.parse_function_rest()
+        node = FunctionDeclarationNode(function_name, params, function_return_type, body, defaults)
+        node.type_parameters = type_parameters
+        node.line, node.column, node.filename = function_token.line, function_token.column, self.filename
+        return node
+
+    def parse_type_parameters(self):
+        if not (self.peek() and self.peek().kind == "LBRACKET"):
+            return []
+        self.consume("LBRACKET")
+        names = [self.expect_name("a type parameter name, for example T").text]
+        while self.peek() and self.peek().kind == "COMMA":
+            self.consume("COMMA")
+            names.append(self.expect_name("a type parameter name").text)
+        self.consume("RBRACKET")
+        if len(set(names)) != len(names):
+            raise self.error("Type parameter names must be different")
+        return names
+
+    def parse_lambda(self):
+        start = self.consume("IDENTIFIER", "func")
+        params, ret_ty, body, defaults = self.parse_function_rest()
+        if defaults:
+            raise self.error("A function written inside an expression cannot have default values", start)
+        node = LambdaNode(params, ret_ty, body)
+        node.line, node.column, node.filename = start.line, start.column, self.filename
+        return node
+
+    def parse_function_rest(self):
         self.consume("LPAREN")
         params = []
         defaults = {}
@@ -893,7 +1134,11 @@ class Parser:
         function_return_type = None
         if self.peek() and self.peek().kind == "COLON":
             self.consume("COLON")
-            if self.peek() and self.peek().kind != "LPAREN":
+            tuple_return = self.parse_tuple_type() if self.peek() and self.peek().kind == "LPAREN" else None
+            if tuple_return is not None:
+                function_return_type = tuple_return
+                self.consume("COLON")
+            elif self.peek() and self.peek().kind != "LPAREN":
                 if self.at_word("void"):
                     self.consume("IDENTIFIER")
                     function_return_type = "void"
@@ -923,7 +1168,7 @@ class Parser:
         if function_return_type is None:
             function_return_type = "int" if all_returns else "void"
 
-        return FunctionDeclarationNode(function_name, params, function_return_type, body, defaults)
+        return params, function_return_type, body, defaults
 
     def parse_variable_declaration(self):
         declaration_keyword = self.consume("KEYWORD").text
@@ -943,8 +1188,6 @@ class Parser:
             variable_type = self.parse_type()
         elif is_constant:
             raise self.error("const declarations require an explicit type")
-        elif len(variable_names) > 1:
-            raise self.error("Grouped declarations require an explicit type")
 
         has_initializer = self.peek() and self.peek().kind == "OPERATOR" and self.peek().text == "="
         if has_initializer:
@@ -958,6 +1201,9 @@ class Parser:
             if is_constant:
                 raise self.error("const declarations require an initializer")
 
+        if len(variable_names) > 1 and variable_type is None and (initializers is None or len(initializers) > 1):
+            raise self.error("Grouped declarations require an explicit type",
+                             hint="or unpack one tuple: val q, r = divide(7, 2)")
         if len(variable_names) == 1 and initializers is not None:
             return VariableDeclarationNode(
                 is_constant,
@@ -977,6 +1223,21 @@ class Parser:
         return token is not None and token.kind == "OPERATOR" and token.text in operators
 
     def parse_expression(self):
+        value = self.parse_or_expression()
+        if self.at_word("if"):
+            saved = self.position
+            try:
+                self.consume()
+                cond = self.parse_or_expression()
+                if self.at_word("else"):
+                    self.consume()
+                    return ConditionalNode(cond, value, self.parse_expression())
+            except SyntaxError:
+                pass
+            self.position = saved
+        return value
+
+    def parse_or_expression(self):
         left = self.parse_logical_and_expression()
         while self.at_operator("||", "or"):
             self.consume("OPERATOR")
@@ -1034,9 +1295,22 @@ class Parser:
                 break
             if token.kind == "LBRACKET":
                 self.consume("LBRACKET")
-                idx = self.parse_expression()
+                idx = None if self.peek() and self.peek().kind == "COLON" else self.parse_expression()
+                if self.peek() and self.peek().kind == "COLON":
+                    self.consume("COLON")
+                    end = None if self.peek() and self.peek().kind == "RBRACKET" else self.parse_expression()
+                    self.consume("RBRACKET")
+                    node = SliceNode(node, idx, end)
+                    continue
                 self.consume("RBRACKET")
                 node = ArrayAccessNode(node, idx)
+            elif token.kind == "LPAREN" and isinstance(
+                    node, (FunctionCallNode, MethodCallNode, ArrayAccessNode, DictionaryAccessNode, CallValueNode,
+                           LambdaNode)):
+                self.consume("LPAREN")
+                args = self.parse_call_arguments()
+                self.consume("RPAREN")
+                node = CallValueNode(node, args)
             elif token.kind == "DOT":
                 self.consume("DOT")
                 member_token = self.expect_name("a name after '.'")
@@ -1079,6 +1353,15 @@ class Parser:
                 map_entries = []
                 while self.peek() and self.peek().kind != "RBRACE":
                     key = self.parse_expression()
+                    if not map_entries and self.peek() and self.peek().kind in ("COMMA", "RBRACE"):
+                        elems = [key]
+                        while self.peek() and self.peek().kind == "COMMA":
+                            self.consume("COMMA")
+                            if self.peek() and self.peek().kind == "RBRACE":
+                                break
+                            elems.append(self.parse_expression())
+                        self.consume("RBRACE")
+                        return SetLiteralNode(elems)
                     self.consume("COLON")
                     map_entries.append((key, self.parse_expression()))
                     if self.peek() and self.peek().kind == "COMMA":
@@ -1105,7 +1388,6 @@ class Parser:
         elif current_token.kind == "LPAREN":
             self.consume("LPAREN")
 
-            # Check if this parenthesized block is a WindowConfigNode (e.g. size = (260, 36))
             if (
                 self.peek()
                 and self.peek().kind == "IDENTIFIER"
@@ -1117,7 +1399,6 @@ class Parser:
 
             first_expr = self.parse_expression()
 
-            # Handle tuples like (260, 36)
             if self.peek() and self.peek().kind == "COMMA":
                 elems = [first_expr]
                 while self.peek() and self.peek().kind == "COMMA":
@@ -1125,11 +1406,8 @@ class Parser:
                     elems.append(self.parse_expression())
                 self.consume("RPAREN")
 
-                if len(elems) == 2:
-                    return WindowSizeNode(elems[0], elems[1])
                 return TupleNode(elems)
 
-            # Single expression inside parentheses
             self.consume("RPAREN")
             return first_expr
         elif current_token.kind == "INT_LITERAL":
@@ -1147,7 +1425,15 @@ class Parser:
             return LiteralNode("bool", self.consume().text == "true")
         elif current_token.kind == "STRING_LITERAL":
             return LiteralNode("str", unescape_string(self.consume().text[1:-1]))
+        elif current_token.kind == "FSTRING":
+            return self.parse_format_string(self.consume())
         elif current_token.kind == "IDENTIFIER":
+            if current_token.text == "func" and self.position + 1 < len(self.tokens) \
+                    and self.tokens[self.position + 1].kind == "LPAREN":
+                return self.parse_lambda()
+            generic_call = self.try_generic_call()
+            if generic_call is not None:
+                return generic_call
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "LPAREN":
                 name_token = self.consume("IDENTIFIER")
                 self.consume("LPAREN")
@@ -1164,6 +1450,18 @@ class Parser:
             if self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind == "DOT":
                 receiver_token = self.consume("IDENTIFIER")
                 library_name = receiver_token.text
+                receiver_binding = self.bindings.get(library_name)
+                if receiver_binding is not None and receiver_binding.kind in ("class", "constant"):
+                    library_name = receiver_binding.target
+                if receiver_binding is not None and receiver_binding.kind == "module" \
+                        and self.position + 1 < len(self.tokens) and self.tokens[self.position + 1].kind != "LPAREN":
+                    module = receiver_binding.target
+                    member = self.tokens[self.position + 1]
+                    if member is not None and not isinstance(module, native.NativeModule) \
+                            and member.text in module.constants:
+                        self.consume("DOT")
+                        self.consume("IDENTIFIER")
+                        return VariableAccessNode(module.constants[member.text])
                 self.consume("DOT")
                 method_token = self.expect_name("a name after '.'")
                 meth_name = method_token.text
@@ -1178,13 +1476,132 @@ class Parser:
                 self.reject_member_access(receiver_token, method_token)
                 return DictionaryAccessNode(VariableAccessNode(library_name), meth_name)
 
-            return VariableAccessNode(self.consume("IDENTIFIER").text)
+            name_token = self.consume("IDENTIFIER")
+            if name_token.text == "none":
+                return LiteralNode("none", None)
+            binding = self.bindings.get(name_token.text)
+            if binding is not None and binding.kind in ("function", "constant", "class"):
+                return VariableAccessNode(binding.target)
+            return VariableAccessNode(name_token.text)
         else:
             raise self.error(
                 f"Unexpected {self.describe_token(current_token)} in an expression",
                 current_token,
                 "an expression is a value: a number, string, true/false, a name, or a call",
             )
+
+    def try_generic_call(self):
+        name_token = self.peek()
+        if self.position + 2 >= len(self.tokens) or self.tokens[self.position + 1].kind != "LBRACKET":
+            return None
+        after = self.tokens[self.position + 2]
+        if name_token.text not in self.session.generic_names and after.kind not in ("TYPE", "CAST"):
+            return None
+        saved = self.position
+        try:
+            self.consume("IDENTIFIER")
+            self.consume("LBRACKET")
+            type_arguments = [self.parse_type("a type argument")]
+            while self.peek() and self.peek().kind == "COMMA":
+                self.consume("COMMA")
+                type_arguments.append(self.parse_type("a type argument"))
+            self.consume("RBRACKET")
+            self.consume("LPAREN")
+        except SyntaxError:
+            self.position = saved
+            return None
+        args = self.parse_call_arguments()
+        self.consume("RPAREN")
+        name = name_token.text
+        binding = self.bindings.get(name)
+        if binding is not None and binding.kind in ("function", "class"):
+            name = binding.target
+        node = GenericCallNode(name, type_arguments, args)
+        node.line, node.column, node.filename = name_token.line, name_token.column, self.filename
+        return node
+
+    def parse_format_string(self, token):
+        body = token.text[2:-1]
+        parts = []
+        text = []
+        idx = 0
+
+        def flush():
+            if text:
+                parts.append(unescape_string("".join(text)))
+                text.clear()
+
+        while idx < len(body):
+            ch = body[idx]
+            if ch == "\\":
+                text.append(body[idx:idx + 2])
+                idx += 2
+                continue
+            if ch in "{}" and body[idx + 1:idx + 2] == ch:
+                text.append(ch)
+                idx += 2
+                continue
+            if ch == "}":
+                raise self.error("A single '}' in an f-string must be written '}}'", token)
+            if ch != "{":
+                text.append(ch)
+                idx += 1
+                continue
+            depth = 0
+            end = idx
+            in_string = False
+            spec_at = None
+            while end < len(body):
+                symbol = body[end]
+                if body.startswith('\\"', end):
+                    in_string = not in_string
+                    end += 2
+                    continue
+                if in_string:
+                    if symbol == "\\":
+                        end += 1
+                elif symbol in "{([":
+                    depth += 1
+                elif symbol in "})]":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                elif symbol == ":" and depth == 1:
+                    spec_at = end
+                end += 1
+            if end >= len(body):
+                raise self.error("An f-string has a '{' without a matching '}'", token,
+                                 "write {{ for a literal brace")
+            inner_end = spec_at if spec_at is not None else end
+            src = body[idx + 1:inner_end].replace('\\"', '"')
+            spec = body[spec_at + 1:end] if spec_at is not None else None
+            if not src.strip():
+                raise self.error("An f-string has an empty {}", token)
+            flush()
+            parts.append((self.parse_embedded_expression(src, token), spec))
+            idx = end + 1
+        flush()
+        node = FormatStringNode(parts)
+        node.line, node.column, node.filename = token.line, token.column, self.filename
+        return node
+
+    def parse_embedded_expression(self, source, token):
+        try:
+            inner_tokens = tokenize(source)
+        except SyntaxError as err:
+            raise self.error(f"Inside an f-string: {str(err).splitlines()[0]}", token)
+        for inner in inner_tokens:
+            inner.line = token.line
+            inner.column = token.column
+        saved_tokens, saved_position = self.tokens, self.position
+        self.tokens, self.position = inner_tokens, 0
+        try:
+            expr = self.parse_expression()
+            if self.peek() is not None:
+                raise self.error(f"Unexpected {self.describe_token(self.peek())} inside an f-string", token)
+        finally:
+            self.tokens, self.position = saved_tokens, saved_position
+        return expr
 
     def parse_dictionary_entry(self):
         key_token = self.consume()
@@ -1283,7 +1700,7 @@ class Parser:
 
     def file_stem_name(self, path_token):
         raw = path_token.text[1:-1]
-        stem = os.path.splitext(os.path.basename(raw))[0]
+        stem = os.path.splitext(os.path.basename(raw.lstrip("@")))[0]
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", stem):
             raise self.error(
                 f"Cannot use the file name '{stem}' as an import name",
@@ -1441,26 +1858,27 @@ class Parser:
             for cls_name in sorted(module.classes):
                 if not cls_name.startswith("_"):
                     self.bind_name(cls_name, "class", cls_name, item_token)
+            for constant_name, symbol in sorted(module.constants.items()):
+                if not constant_name.startswith("_"):
+                    self.bind_name(constant_name, "constant", symbol, item_token)
             return
+        bound = alias_token or item_token
         if name in module.functions:
-            bound = alias_token or item_token
             self.bind_name(bound.text, "function", module.functions[name], bound)
         elif name in module.classes:
-            if alias_token is not None and alias_token.text != name:
-                raise self.error(
-                    f"Class '{name}' cannot be imported under another name",
-                    alias_token,
-                    f"classes keep one global name; use 'from ... import {name}' or call it as module.{name}(...)",
-                    ImportError,
-                )
-            self.bind_name(name, "class", name, item_token)
+            if bound.text != name:
+                self.bind_name(bound.text, "class", name, bound)
+            else:
+                self.bind_name(name, "class", name, item_token)
+        elif name in module.constants:
+            self.bind_name(bound.text, "constant", module.constants[name], bound)
         else:
             self.raise_missing_export(module, item_token)
 
     def exported_names(self, module):
         if isinstance(module, native.NativeModule):
             return set(module.functions)
-        return set(module.functions) | set(module.classes)
+        return set(module.functions) | set(module.classes) | set(module.constants)
 
     def raise_missing_export(self, module, token):
         names = self.exported_names(module)
@@ -1504,8 +1922,17 @@ class Parser:
         raw = path_token.text[1:-1]
         if not raw.strip():
             raise self.error("The import path is empty", path_token, kind=ImportError)
+        if raw.startswith("@"):
+            from tools import resolve_package_path
+            package = raw[1:].split("/")[0]
+            resolved = resolve_package_path(raw, self.base_dir)
+            if resolved is None or not os.path.exists(resolved):
+                raise self.error(
+                    f"Cannot find the package '{package}'", path_token,
+                    f"install it in your project folder with: vamp install <git address> {package}", ImportError)
+            raw = resolved
         extension = os.path.splitext(raw)[1].lower()
-        allowed = SOURCE_EXTENSIONS + NATIVE_EXTENSIONS
+        allowed = SOURCE_EXTENSIONS + DATA_EXTENSIONS + NATIVE_EXTENSIONS
         directory_candidate = raw if os.path.isabs(raw) else os.path.join(self.base_dir, raw)
         if os.path.isdir(directory_candidate):
             raise self.error(f"Cannot import '{raw}': it is a directory, not a file", path_token, kind=ImportError)
@@ -1514,7 +1941,8 @@ class Parser:
             raise self.error(
                 f"Cannot import '{raw}': unsupported file type {shown}",
                 path_token,
-                "use .vp for Vamp files, or " + " ".join(NATIVE_EXTENSIONS) + " for C/C++ files",
+                "use .vp for Vamp files, .vpdata for data files, or " + " ".join(NATIVE_EXTENSIONS)
+                + " for C/C++ files",
                 ImportError,
             )
         full = raw if os.path.isabs(raw) else os.path.join(self.base_dir, raw)
@@ -1530,6 +1958,31 @@ class Parser:
             )
         real = os.path.realpath(full)
         session = self.session
+
+        if extension in DATA_EXTENSIONS:
+            cached = session.modules.get(real)
+            if cached is not None:
+                return cached, False
+            from vpdata import build_data_module
+            module = ModuleInfo(self.unique_module_id(real), real)
+            try:
+                stmts, constants, fns, classes, _ = build_data_module(real, module.module_id, session)
+            except UnicodeDecodeError:
+                raise self.error(f"Cannot import '{os.path.basename(real)}': the file is not valid UTF-8",
+                                 path_token, kind=ImportError)
+            except (SyntaxError, TypeError, ImportError) as err:
+                note = f"\n  note: while importing '{os.path.basename(real)}' from {self.filename or '<source>'}:{path_token.line}:{path_token.column}"
+                chained = type(err)(str(err) + note)
+                chained.vamp_located = True
+                for attribute in ("vamp_file", "vamp_line", "vamp_column", "vamp_width", "vamp_message", "vamp_hint"):
+                    setattr(chained, attribute, getattr(err, attribute, None))
+                raise chained from None
+            module.statements = stmts
+            module.constants = constants
+            module.functions = fns
+            module.classes = classes
+            session.modules[real] = module
+            return module, True
 
         if extension in SOURCE_EXTENSIONS:
             if real in session.stack:
@@ -1593,13 +2046,22 @@ class Parser:
 
         own = [node for node in own_statements if not isinstance(node, (ModuleImportNode, NativeImportNode))]
         rename = {}
+        constants = {}
         for node in own:
             if isinstance(node, FunctionDeclarationNode):
                 rename[node.function_name] = f"{module_id}.{node.function_name}"
             elif isinstance(node, ClassDeclarationNode):
                 module.classes.add(node.class_name)
+            elif isinstance(node, EnumDeclarationNode):
+                module.classes.add(node.enum_name)
+            elif isinstance(node, InterfaceDeclarationNode):
+                module.classes.add(node.interface_name)
+            elif isinstance(node, VariableDeclarationNode):
+                constants[node.variable_name] = f"{module_id}.{node.variable_name}"
         module.functions = {name: symbol for name, symbol in rename.items()}
+        module.constants = constants
         rename_calls(own, rename)
+        rename_variables(own, constants)
 
         flattened = []
         for node in own_statements:
@@ -1612,9 +2074,11 @@ class Parser:
 
     def validate_module_statements(self, sub_parser, statements, path):
         allowed = (FunctionDeclarationNode, ClassDeclarationNode, EnumDeclarationNode, LibraryImportNode,
-                   ModuleImportNode, NativeImportNode)
+                   ModuleImportNode, NativeImportNode, InterfaceDeclarationNode)
         for node in statements:
             if isinstance(node, allowed):
+                continue
+            if isinstance(node, VariableDeclarationNode) and node.is_constant:
                 continue
             description = STATEMENT_DESCRIPTIONS.get(type(node).__name__, type(node).__name__)
             raise sub_parser.error_at_node(
@@ -1701,6 +2165,22 @@ class Parser:
                 f"add parentheses: {receiver_token.text}.{member_token.text}(...)",
                 TypeError,
             )
+
+
+def rename_variables(value, rename):
+    if not rename:
+        return
+    if isinstance(value, (VariableAccessNode, AssignmentNode, VariableDeclarationNode)) and value.variable_name in rename:
+        value.variable_name = rename[value.variable_name]
+    if isinstance(value, ASTNode):
+        for child in list(vars(value).values()):
+            rename_variables(child, rename)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            rename_variables(child, rename)
+    elif isinstance(value, dict):
+        for child in value.values():
+            rename_variables(child, rename)
 
 
 def rename_calls(value, rename):

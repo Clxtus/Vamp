@@ -31,6 +31,16 @@ typedef struct VampMap {
     char *values;
 } VampMap;
 
+void vamp_start(void);
+void *vamp_gc_alloc(size_t size);
+void *vamp_gc_alloc_atomic(size_t size);
+void *vamp_gc_realloc(void *pointer, size_t size);
+void vamp_free(void *pointer);
+void vamp_gc_register_thread(void);
+void vamp_gc_unregister_thread(void);
+void vamp_gc_add_root(void *address, size_t size);
+void vamp_gc_remove_root(void *address);
+
 void vamp_throw(const char *message);
 void vamp_throw_format(const char *format, ...);
 

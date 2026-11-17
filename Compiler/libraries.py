@@ -20,6 +20,24 @@ OS_METHODS = frozenset(
     }
 )
 
+OS_RUNTIME = {
+    "Args": ("vamp_os_args", (), "list:str"),
+    "Get_Env": ("vamp_os_get_env", ("str",), "str"),
+    "Set_Env": ("vamp_os_set_env", ("str", "str"), "bool"),
+    "Env_Exists": ("vamp_os_env_exists", ("str",), "bool"),
+    "Run": ("vamp_os_run", ("str",), "int"),
+    "Run_Output": ("vamp_os_run_output", ("str",), "str"),
+    "Start_Process": ("vamp_os_start_process", ("str",), "c_i64"),
+    "Process_Running": ("vamp_os_process_running", ("c_i64",), "bool"),
+    "Wait_Process": ("vamp_os_wait_process", ("c_i64",), "int"),
+    "Kill_Process": ("vamp_os_kill_process", ("c_i64",), "bool"),
+}
+OS_METHODS = OS_METHODS | frozenset(OS_RUNTIME) | {
+    "On_Click", "On_Key", "Every", "Run_Events", "Stop_Events",
+    "Canvas_Clear", "Fill_Rect", "Draw_Rect", "Draw_Line", "Fill_Circle", "Draw_Circle", "Draw_Text",
+    "Draw_Image", "Present", "Canvas_Width", "Canvas_Height", "Save_Canvas",
+}
+
 # int = 32-bit C int, c_i64 = 64-bit C int, number = any number passed as a C double.
 STANDARD_LIBRARIES = {
     "math": {
@@ -64,6 +82,19 @@ STANDARD_LIBRARIES = {
         "Second": ("vamp_time_part", (), "int", (5,)),
         "Weekday": ("vamp_time_part", (), "int", (6,)),
         "Sleep": ("vamp_time_sleep", ("int",), "void"),
+        "Make": ("vamp_time_make", ("int", "int", "int", "int", "int", "int"), "c_i64"),
+        "Make_Date": ("vamp_time_make_date", ("int", "int", "int"), "c_i64"),
+        "Format_Time": ("vamp_time_format_time", ("c_i64", "str"), "str"),
+        "Parse": ("vamp_time_parse", ("str", "str"), "c_i64"),
+        "Add_Days": ("vamp_time_add_days", ("c_i64", "c_i64"), "c_i64"),
+        "Days_Between": ("vamp_time_days_between", ("c_i64", "c_i64"), "c_i64"),
+        "Year_Of": ("vamp_time_part_of", ("c_i64",), "int", (0,)),
+        "Month_Of": ("vamp_time_part_of", ("c_i64",), "int", (1,)),
+        "Day_Of": ("vamp_time_part_of", ("c_i64",), "int", (2,)),
+        "Hour_Of": ("vamp_time_part_of", ("c_i64",), "int", (3,)),
+        "Minute_Of": ("vamp_time_part_of", ("c_i64",), "int", (4,)),
+        "Second_Of": ("vamp_time_part_of", ("c_i64",), "int", (5,)),
+        "Weekday_Of": ("vamp_time_part_of", ("c_i64",), "int", (6,)),
     },
     "file": {
         "Read_Text": ("vamp_file_read_text", ("str",), "str"),
@@ -143,6 +174,17 @@ STANDARD_LIBRARIES = {
         "Close": ("vamp_net_close", ("int",), "void"),
         "Http_Get": ("vamp_net_http_get", ("str",), "str"),
         "Download": ("vamp_net_download", ("str", "str"), "bool"),
+        "Http_Post": ("vamp_net_http_post", ("str", "str", "str"), "str"),
+        "Set_Timeout": ("vamp_net_set_timeout", ("int", "int"), "bool"),
+    },
+    "regex": {
+        "Matches": ("vamp_regex_matches", ("str", "str"), "bool"),
+        "Contains": ("vamp_regex_contains", ("str", "str"), "bool"),
+        "Find": ("vamp_regex_find", ("str", "str"), "str"),
+        "Find_All": ("vamp_regex_find_all", ("str", "str"), "list:str"),
+        "Groups": ("vamp_regex_groups", ("str", "str"), "list:str"),
+        "Replace": ("vamp_regex_replace", ("str", "str", "str"), "str"),
+        "Split": ("vamp_regex_split", ("str", "str"), "list:str"),
     },
     "input": {
         "Key_Down": ("vamp_input_key_down", ("str",), "bool"),
@@ -152,6 +194,10 @@ STANDARD_LIBRARIES = {
         "Mouse_Y": ("vamp_input_mouse_position", (), "int", (1,)),
         "Mouse_Window_X": ("vamp_input_mouse_window_position", ("str",), "int", (0,)),
         "Mouse_Window_Y": ("vamp_input_mouse_window_position", ("str",), "int", (1,)),
+    },
+    "memory": {
+        "Collect": ("vamp_gc_collect", (), "void"),
+        "Used": ("vamp_gc_used", (), "c_i64"),
     },
     "audio": {
         "Play": ("vamp_audio_play", ("str",), "bool", (0,)),
@@ -172,4 +218,5 @@ BUILTIN_LIBRARIES = {"os": OS_METHODS}
 BUILTIN_LIBRARIES.update({name: frozenset(methods) for name, methods in STANDARD_LIBRARIES.items()})
 
 SOURCE_EXTENSIONS = (".vp",)
+DATA_EXTENSIONS = (".vpdata",)
 NATIVE_EXTENSIONS = (".h", ".hh", ".hpp", ".hxx", ".c", ".cc", ".cpp", ".cxx")

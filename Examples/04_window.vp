@@ -1,0 +1,17 @@
+import os
+
+val window = os.Make_Window("Counter", (
+    size = (320, 180),
+    style = "modern",
+    theme = "dark"
+))
+val counter = os.Make_Interface("label", "Counter", "count", ( size = (200, 30), position = (20, 20), text = "0" ))
+val more = os.Make_Interface("button", "Counter", "more", ( size = (140, 36), position = (20, 70), text = "Add one" ))
+
+val clicks : int = 0
+os.On_Click("Counter", "more", func () : (
+    clicks += 1
+    os.Set_Interface_Text("Counter", "count", str(clicks))
+))
+os.On_Key("ESCAPE", func () : ( os.Stop_Events() ))
+os.Run_Events()

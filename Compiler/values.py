@@ -17,9 +17,10 @@ class DictionaryLiteralValue:
 
 
 class ClassInstanceValue:
-    def __init__(self, pointer, temporary=False):
+    def __init__(self, pointer, temporary=False, reference=False):
         self.pointer = pointer
         self.temporary = temporary
+        self.reference = reference
 
 
 class PointerValue:

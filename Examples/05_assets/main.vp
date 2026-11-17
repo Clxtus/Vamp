@@ -1,0 +1,12 @@
+import file
+import models : "Models.vpdata"
+
+println(models.cube.name + " at " + str(models.cube.position) + ", scale " + str(models.cube.scale))
+
+for (entry) in (models.all()) : (
+    val lines = file.Read_Text(entry.full_path).split("\n")
+    println(f"{entry.id}: {entry.path} ({entry.type}, {len(lines)} lines)")
+)
+
+val floor = models.get("floor")
+if (floor != none) : ( println("floor uses " + floor.path) )

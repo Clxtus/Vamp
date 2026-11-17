@@ -1,0 +1,32 @@
+class Animal : (
+    val name : str
+    func sound() : str : ( return : str ("...") )
+    func describe() : str : ( return : str (self.name + " says " + self.sound()) )
+)
+
+class Dog(Animal) : (
+    func sound() : str : ( return : str ("Woof") )
+)
+
+class Cat(Animal) : (
+    func sound() : str : ( return : str ("Meow") )
+)
+
+struct Point : (
+    val x : float
+    val y : float
+)
+
+val pets : list[Animal] = [Dog("Max"), Cat("Tom"), Animal("Thing")]
+for (pet) in (pets) : ( println(pet.describe()) )
+
+val p = Point(1.5, 2.0)
+println(p.x + p.y)
+
+func safe_divide(a : int, b : int) : int : (
+    if (b == 0) : ( throw("cannot divide by zero") )
+    return : int (a / b)
+)
+
+try : ( println(safe_divide(10, 0)) )
+catch (problem) : ( println("Error: " + problem) )

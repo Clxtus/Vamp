@@ -11,6 +11,7 @@
 typedef struct {
     void (*entry)(int32_t);
     int32_t argument;
+    void *closure;
 } VampThreadStart;
 
 static HANDLE vamp_threads[VAMP_MAX_THREADS];
@@ -28,13 +29,36 @@ static void vamp_table_leave(void) {
 }
 
 static DWORD WINAPI vamp_thread_main(LPVOID parameter) {
-    VampThreadStart start = *(VampThreadStart *)parameter;
+    VampThreadStart start;
+    ULONG reserve = 64 * 1024;
+    SetThreadStackGuarantee(&reserve);
+    vamp_gc_register_thread();
+    start = *(VampThreadStart *)parameter;
+    vamp_gc_remove_root(&((VampThreadStart *)parameter)->closure);
     free(parameter);
-    start.entry(start.argument);
+    if (start.closure) {
+        ((void (*)(void *)) * (void **)start.closure)(start.closure);
+    } else {
+        start.entry(start.argument);
+    }
+    vamp_gc_unregister_thread();
     return 0;
 }
 
+static int32_t vamp_thread_launch(void *entry, int32_t argument, void *closure);
+
 int32_t vamp_thread_start(void *entry, int32_t argument) {
+    return vamp_thread_launch(entry, argument, NULL);
+}
+
+int32_t vamp_thread_start_closure(void *closure) {
+    if (!closure) {
+        vamp_throw("thread.Start was given an empty function value");
+    }
+    return vamp_thread_launch(NULL, 0, closure);
+}
+
+static int32_t vamp_thread_launch(void *entry, int32_t argument, void *closure) {
     VampThreadStart *start = (VampThreadStart *)malloc(sizeof(VampThreadStart));
     HANDLE handle;
     int32_t slot = -1;
@@ -43,6 +67,8 @@ int32_t vamp_thread_start(void *entry, int32_t argument) {
     }
     start->entry = (void (*)(int32_t))entry;
     start->argument = argument;
+    start->closure = closure;
+    vamp_gc_add_root(&start->closure, sizeof(start->closure));
     vamp_table_enter();
     for (int32_t index = 0; index < VAMP_MAX_THREADS; index++) {
         if (vamp_threads[index] == NULL) {
@@ -56,7 +82,7 @@ int32_t vamp_thread_start(void *entry, int32_t argument) {
         free(start);
         vamp_throw("too many threads are alive at once; join finished threads to free their numbers");
     }
-    handle = CreateThread(NULL, 0, vamp_thread_main, start, 0, NULL);
+    handle = CreateThread(NULL, 16 * 1024 * 1024, vamp_thread_main, start, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
     if (!handle) {
         vamp_table_enter();
         vamp_threads[slot] = NULL;

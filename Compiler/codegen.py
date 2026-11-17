@@ -1,15 +1,18 @@
 from llvmlite import ir
 import native
 from diagnostics import SOURCE_CACHE, make_error, suggest
+from classes import ClassSystem
+from debuginfo import DebugInfo
+from features import LanguageFeatures
+from generics import Generics
 from language import LanguageCore
 from stdlib import StandardLibrary
-from values import ArrayLiteralValue, ArrayReferenceValue, ClassInstanceValue, DictionaryLiteralValue, PointerValue
-from parser import ArrayAccessNode, ArrayAssignmentNode, ArrayLiteralNode, AssignmentNode, BinaryOpNode, ClassDeclarationNode, ClassInstanceDeclarationNode, ComparisonNode, DictionaryAccessNode, DictionaryLiteralNode, ForLoopNode, IfNode, LiteralNode, LibraryImportNode, ImportFileNode, LibraryCallNode, MallocNode, MethodCallNode, VariableAccessNode, VariableDeclarationNode, WhileLoopNode, WindowConfigNode, WindowPointNode, WindowSizeNode
+from parser import LiteralNode, WindowConfigNode, WindowPointNode, WindowSizeNode
 
 # os lib + windows/ui codegen. oldest part of the compiler, change with care
 class OsCodeGenerator:
     def __init__(self):
-        self.module = ir.Module(name="vamp_module")
+        self.module = ir.Module(name="vamp_module", context=ir.Context())
         self.builder = None
         self.variable_pointers = {}
         self.type_information = {}
@@ -67,8 +70,6 @@ class OsCodeGenerator:
         exit_type = ir.FunctionType(ir.VoidType(), [self.int32_type])
         self.exit_function = ir.Function(self.module, exit_type, name="exit")
 
-        free_type = ir.FunctionType(ir.VoidType(), [self.char_pointer_type])
-        self.free_function = ir.Function(self.module, free_type, name="free")
 
         create_directory_type = ir.FunctionType(self.int32_type, [self.char_pointer_type, self.char_pointer_type, self.char_pointer_type])
         self.create_directory_function = ir.Function(self.module, create_directory_type, name="SHCreateDirectoryExA")
@@ -670,6 +671,7 @@ class OsCodeGenerator:
         main_function = ir.Function(self.module, main_type, name="main")
         entry_block = main_function.append_basic_block(name="entry")
         self.builder = ir.IRBuilder(entry_block)
+        self.builder.call(self.runtime_function("vamp_start", ir.VoidType(), []), [])
 
         self.prepare_program(program)
         self.visit_block(program)
@@ -892,6 +894,8 @@ class OsCodeGenerator:
         res = self.builder.call(declared, args, name=f"{function.name}_result")
         if return_kind == "bool":
             res = self.builder.icmp_signed("!=", res, ir.Constant(self.int32_type, 0), name=f"{function.name}_flag")
+        if return_kind == "str":
+            self.runtime_units.update(("core", "gc"))
         return res, return_kind
 
     def build_native_info(self):
@@ -912,14 +916,17 @@ class OsCodeGenerator:
         info.runtime_units = sorted(self.runtime_units)
         return info
 
+    @property
+    def free_function(self):
+        return self.runtime_function("vamp_free", ir.VoidType(), [self.char_pointer_type])
+
     def allocate_bytes(self, size, name=None):
         if size.type == self.int32_type:
             size = self.builder.zext(size, self.int64_type, name="allocation_size")
         elif size.type != self.int64_type:
             raise TypeError(f"Allocation size must be an integer, got {size.type}")
-        if name is None:
-            return self.builder.call(self.malloc_function, [size])
-        return self.builder.call(self.malloc_function, [size], name=name)
+        allocate = self.runtime_function("vamp_gc_alloc", self.char_pointer_type, [self.int64_type])
+        return self.builder.call(allocate, [size], name=name or "")
 
     def get_window_icon_function(self):
         if self.window_icon_function is not None:
@@ -2084,9 +2091,11 @@ class OsCodeGenerator:
                 [ir.Constant(pointer_type, None)],
             ),
         ]
+        load_cursor = self.get_win32_function("LoadCursorA", pointer_type, [pointer_type, pointer_type])
         class_fields.extend([
             ir.Constant(pointer_type, None),
-            ir.Constant(pointer_type, None),
+            thread_builder.call(load_cursor, [ir.Constant(pointer_type, None),
+                                              ir.Constant(self.int64_type, 32512).inttoptr(pointer_type)]),
             ir.Constant(self.int64_type, 6).inttoptr(pointer_type),
             ir.Constant(pointer_type, None),
         ])
@@ -3295,7 +3304,37 @@ class OsCodeGenerator:
             alpha,
         )
 
+    CANVAS_METHODS = {
+        "Canvas_Clear": ("vamp_ui_canvas_clear", ("str",), "void"),
+        "Fill_Rect": ("vamp_ui_canvas_fill_rect", ("int", "int", "int", "int", "str"), "void"),
+        "Draw_Rect": ("vamp_ui_canvas_draw_rect", ("int", "int", "int", "int", "str"), "void"),
+        "Draw_Line": ("vamp_ui_canvas_draw_line", ("int", "int", "int", "int", "str"), "void"),
+        "Fill_Circle": ("vamp_ui_canvas_fill_circle", ("int", "int", "int", "str"), "void"),
+        "Draw_Circle": ("vamp_ui_canvas_draw_circle", ("int", "int", "int", "str"), "void"),
+        "Draw_Text": ("vamp_ui_canvas_draw_text", ("int", "int", "str", "str", "int"), "void"),
+        "Draw_Image": ("vamp_ui_canvas_draw_image", ("str", "int", "int", "int", "int"), "bool"),
+        "Present": ("vamp_ui_canvas_present", (), "void"),
+        "Save_Canvas": ("vamp_ui_canvas_save", ("str",), "bool"),
+        "Canvas_Width": ("vamp_ui_canvas_width", (), "int"),
+        "Canvas_Height": ("vamp_ui_canvas_height", (), "int"),
+    }
+
+    def emit_canvas_call(self, node):
+        symbol, parameter_types, ret_ty = self.CANVAS_METHODS[node.method_name]
+        self.require_argument_count(node, 2 + len(parameter_types))
+        control_id = self.get_interface_id(node.arguments[0], node.arguments[1], "canvas")
+        vals = [ir.Constant(self.int32_type, control_id)]
+        for pos, parameter_type in enumerate(parameter_types, start=2):
+            value, _ = self.visit_typed_argument(node, pos, parameter_type, f"argument {pos + 1}")
+            vals.append(value)
+        res, result_type = self.call_runtime(symbol, ("i32", *("i32" if item == "int" else item
+                                                              for item in parameter_types)),
+                                                "i32" if ret_ty == "int" else ret_ty, vals)
+        return (res, "int") if ret_ty == "int" else (res, result_type)
+
     def emit_extended_os_call(self, node):
+        if node.method_name in self.CANVAS_METHODS:
+            return self.emit_canvas_call(node)
         window_methods = {
             "Set_Window_Title": (4, ("str",), "bool"),
             "Resize_Window": (5, ("int", "int"), "bool"),
@@ -4250,9 +4289,9 @@ class OsCodeGenerator:
                 if not isinstance(type_expression, LiteralNode) or type_expression.literal_type != "str":
                     raise TypeError("os.Make_Interface type must be a string literal")
                 interface_type = type_expression.value.lower()
-                if interface_type not in ("label", "button", "frame", "icon"):
+                if interface_type not in ("label", "button", "frame", "icon", "canvas"):
                     raise ValueError(
-                        "os.Make_Interface type must be 'label', 'button', 'frame', or 'icon'"
+                        "os.Make_Interface type must be 'label', 'button', 'frame', 'icon', or 'canvas'"
                     )
                 key = self.get_interface_key(window_title_expression, name_expression)
                 if not isinstance(cfg, WindowConfigNode):
@@ -4295,6 +4334,7 @@ class OsCodeGenerator:
                     },
                     "frame": {"background_color", "background_transparency"},
                     "icon": {"icon", "background_color", "background_transparency"},
+                    "canvas": {"background_color"},
                 }
                 supported_properties = common_properties | type_properties[interface_type]
                 unknown_properties = set(cfg.properties) - supported_properties
@@ -4460,6 +4500,7 @@ class OsCodeGenerator:
                     ),
                     "frame": "STATIC",
                     "icon": "STATIC",
+                    "canvas": "STATIC",
                 }[interface_type]
                 control_style = 0x44000000
                 if interface_type == "button":
@@ -4524,7 +4565,10 @@ class OsCodeGenerator:
                             icon_kind = 2
                     if icon_expression is not None:
                         control_style |= 0x00000040
-                ui_kind = {"label": 1 if editable else 0, "button": 2, "frame": 3, "icon": 4}[interface_type]
+                ui_kind = {"label": 1 if editable else 0, "button": 2, "frame": 3, "icon": 4, "canvas": 5}[interface_type]
+                if interface_type == "canvas":
+                    control_style = 0x44000000 | 0x00000100
+                    ex_style = 0
                 interface_request_type = self.get_interface_request_type()
                 interface_request = self.builder.alloca(
                     interface_request_type,
@@ -4797,11 +4841,7 @@ class OsCodeGenerator:
                     self.printf_function,
                     [error_format, name_value, window_title],
                 )
-                empty_text = self.builder.call(
-                    self.malloc_function,
-                    [ir.Constant(self.int64_type, 1)],
-                    name="missing_interface_text",
-                )
+                empty_text = self.allocate_bytes(ir.Constant(self.int64_type, 1), name="missing_interface_text")
                 self.builder.store(
                     ir.Constant(ir.IntType(8), 0),
                     empty_text,
@@ -4820,11 +4860,7 @@ class OsCodeGenerator:
                     allocation_size,
                     ir.Constant(self.int64_type, 1),
                 )
-                text_buffer = self.builder.call(
-                    self.malloc_function,
-                    [allocation_size],
-                    name="interface_text_buffer",
-                )
+                text_buffer = self.allocate_bytes(allocation_size, name="interface_text_buffer")
                 self.builder.call(
                     self.get_window_text_function,
                     [
@@ -6236,7 +6272,8 @@ class OsCodeGenerator:
 
 
 # mixin order = override order, leftmost wins
-class LLVMCodeGenerator(StandardLibrary, LanguageCore, OsCodeGenerator):
+class LLVMCodeGenerator(DebugInfo, StandardLibrary, LanguageFeatures, Generics, ClassSystem, LanguageCore,
+                        OsCodeGenerator):
     def __init__(self):
         super().__init__()
         self.init_language_state()

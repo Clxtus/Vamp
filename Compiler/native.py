@@ -4,9 +4,6 @@ import re
 import subprocess
 import sys
 
-from diagnostics import make_error
-from libraries import NATIVE_EXTENSIONS
-
 C_ONLY_EXTENSIONS = (".c",)
 IMPLEMENTATION_EXTENSIONS = (".c", ".cc", ".cpp", ".cxx")
 HEADER_EXTENSIONS = (".h", ".hh", ".hpp", ".hxx")
@@ -412,10 +409,9 @@ def generate_bridge_source(module, used):
         lines += ['extern "C" {', f'#include "{include_path}"', "}"]
     else:
         lines.append(f'#include "{include_path}"')
-    lines += ["", "static char* vamp_duplicate_string(const char* text, size_t length) {",
-              "    char* copy = static_cast<char*>(std::malloc(length + 1));",
-              "    if (copy) { std::memcpy(copy, text, length); copy[length] = 0; }",
-              "    return copy;", "}", ""]
+    lines += ["", 'extern "C" char* vamp_string_copy_length(const char* text, size_t length);',
+              "static char* vamp_duplicate_string(const char* text, size_t length) {",
+              "    return vamp_string_copy_length(text, length);", "}", ""]
     for fn, idx in used:
         symbol = bridge_symbol(module.module_id, fn.name, idx)
         return_kind = fn.return_type[1]
@@ -463,6 +459,7 @@ def generate_bridge_source(module, used):
 RUNTIME_UNIT_LIBRARIES = {
     "net": ["-lws2_32", "-lwininet"],
     "media": ["-lwinmm", "-luser32"],
+    "system": ["-lshell32"],
     "ui": [
         "-lcomctl32", "-luxtheme", "-ldwmapi", "-lgdiplus", "-ladvapi32", "-lgdi32", "-luser32",
         "-Wl,/manifest:embed",
@@ -509,7 +506,8 @@ def runtime_object(unit, clang):
     return target, ""
 
 
-def build_executable(llvm_ir, native, exe_filename, extra_flags=(), clang=None, temp_directory=None):
+def build_executable(llvm_ir, native, exe_filename, extra_flags=(), clang=None, temp_directory=None,
+                     optimize=True):
     import tempfile
     clang = clang or find_clang()
     cleanup = None
@@ -529,7 +527,7 @@ def build_executable(llvm_ir, native, exe_filename, extra_flags=(), clang=None, 
             cmd += ["-x", "c" if path.lower().endswith(".c") else "c++", path]
         for dirpath in native.include_dirs:
             cmd += ["-I", dirpath]
-    cmd += ["-x", "ir", "-", "-O3", "-o", exe_filename]
+    cmd += ["-x", "ir", "-", "-O3" if optimize else "-O0", "-o", exe_filename]
     if native is not None:
         runtime_inputs = []
         for unit in getattr(native, "runtime_units", []):

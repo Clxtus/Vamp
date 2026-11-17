@@ -189,10 +189,79 @@ static char *vamp_net_fetch(const char *url, size_t *length) {
 char *vamp_net_http_get(const char *url) {
     size_t length = 0;
     char *data = vamp_net_fetch(url, &length);
+    char *text;
     if (!data) {
         vamp_throw_format("could not fetch '%s'", url);
     }
-    return data;
+    text = vamp_string_copy_length(data, length);
+    free(data);
+    return text;
+}
+
+char *vamp_net_http_post(const char *url, const char *body, const char *content_type) {
+    URL_COMPONENTSA parts;
+    char host[256];
+    char path[2048];
+    char headers[512];
+    HINTERNET session;
+    HINTERNET connection;
+    HINTERNET request;
+    char *data = NULL;
+    size_t size = 0;
+    size_t capacity = 0;
+    char *text;
+    DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE;
+    memset(&parts, 0, sizeof(parts));
+    parts.dwStructSize = sizeof(parts);
+    parts.lpszHostName = host;
+    parts.dwHostNameLength = sizeof(host);
+    parts.lpszUrlPath = path;
+    parts.dwUrlPathLength = sizeof(path);
+    if (!InternetCrackUrlA(url, 0, 0, &parts)) {
+        vamp_throw_format("'%s' is not a web address", url);
+    }
+    if (parts.nScheme == INTERNET_SCHEME_HTTPS) {
+        flags |= INTERNET_FLAG_SECURE;
+    }
+    session = InternetOpenA("Vamp", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    connection = session ? InternetConnectA(session, host, parts.nPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0) : NULL;
+    request = connection ? HttpOpenRequestA(connection, "POST", path[0] ? path : "/", NULL, NULL, NULL, flags, 0) : NULL;
+    snprintf(headers, sizeof(headers), "Content-Type: %s\r\n", content_type);
+    if (!request || !HttpSendRequestA(request, headers, (DWORD)-1, (void *)body, (DWORD)strlen(body))) {
+        if (request) InternetCloseHandle(request);
+        if (connection) InternetCloseHandle(connection);
+        if (session) InternetCloseHandle(session);
+        vamp_throw_format("could not post to '%s'", url);
+    }
+    for (;;) {
+        DWORD read = 0;
+        if (size + 8192 + 1 > capacity) {
+            capacity = capacity ? capacity * 2 : 16384;
+            data = (char *)realloc(data, capacity);
+            if (!data) {
+                vamp_throw("out of memory while reading a reply");
+            }
+        }
+        if (!InternetReadFile(request, data + size, 8192, &read) || read == 0) {
+            break;
+        }
+        size += read;
+    }
+    InternetCloseHandle(request);
+    InternetCloseHandle(connection);
+    InternetCloseHandle(session);
+    text = vamp_string_copy_length(data ? data : "", size);
+    free(data);
+    return text;
+}
+
+int32_t vamp_net_set_timeout(int32_t connection, int32_t milliseconds) {
+    DWORD value = milliseconds < 0 ? 0 : (DWORD)milliseconds;
+    if (connection < 1 || connection > VAMP_MAX_SOCKETS || !vamp_socket_used[connection - 1]) {
+        return 0;
+    }
+    return setsockopt(vamp_sockets[connection - 1], SOL_SOCKET, SO_RCVTIMEO, (const char *)&value, sizeof(value)) == 0 &&
+           setsockopt(vamp_sockets[connection - 1], SOL_SOCKET, SO_SNDTIMEO, (const char *)&value, sizeof(value)) == 0;
 }
 
 int32_t vamp_net_download(const char *url, const char *path) {
