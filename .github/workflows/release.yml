@@ -1,0 +1,57 @@
+name: Build Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install llvmlite pyinstaller pillow
+
+      - name: Download WiX Toolset 3.14
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile wix314.zip
+          Expand-Archive wix314.zip -DestinationPath C:\wix314
+
+      - name: Build Vamp compiler (vamp.exe)
+        run: |
+          pyinstaller --clean --noconfirm vamp.spec
+        working-directory: Compiler
+
+      - name: Build WiX MSI installer
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          if ([string]::IsNullOrEmpty($tag)) { $tag = "v1.0.0" }
+          $version = $tag.TrimStart('v')
+          python Installer/build_release.py --version $version --skip-compiler --wix C:\wix314
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vamp-msi
+          path: release/Vamp-*-x64.msi
+
+      - name: Attach assets to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" release/Vamp-*-x64.msi --clobber
