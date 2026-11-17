@@ -1,10 +1,9 @@
 <p align="center"><img src="vamp-vscode/icons/icon.png" width="96" alt="Vamp logo"></p>
 
 <p align="center">
-  <a href="https://github.com/Clxtus/Vamp/releases/latest"><img src="https://img.shields.io/github/v/release/Clxtus/Vamp?color=7d0000&label=release" alt="Release"></a>
-  <a href="https://github.com/Clxtus/Vamp/releases"><img src="https://img.shields.io/github/downloads/Clxtus/Vamp/total?color=2ea44f" alt="Downloads"></a>
-  <a href="https://github.com/Clxtus/Vamp/releases/latest"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078d6" alt="Platform"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Clxtus/Vamp?color=blue" alt="License"></a>
+  <a href="https://github.com/Clxtus/Vamp/releases/latest"><img src="https://img.shields.io/github/v/release/clxtus/vamp?color=7d0000&label=release" alt="Release"></a>
+  <a href="https://github.com/Clxtus/Vamp/releases/latest"><img src="https://img.shields.io/badge/platform-Windows%20x64-7d0000" alt="Platform"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-7d0000" alt="License"></a>
 </p>
 
 # Vamp
