@@ -52,34 +52,3 @@ vamp install <git-url>     add a package to vamp_packages
 ```
 
 Add `--debug` to build with debugging information. See [DOCUMENTATION.md](./DOCUMENTATION.md) for the whole language.
-
-## Repository layout
-
-| Folder | Contents |
-|---|---|
-| `Compiler/` | The compiler (Python and llvmlite) and `runtime/`, the C runtime linked into programs. |
-| `Examples/` | Small programs to start from, including a `.vpdata` asset example. |
-| `vamp-vscode/` | The Visual Studio Code extension. |
-| `Installer/` | The scripts that build the `.msi` installer and the extension `.vsix`. |
-| `Icons/` | Icons for Vamp source and data files. |
-
-## Building from source
-
-You need Python 3.12 or newer with `llvmlite`, `pyinstaller` and `pillow`, LLVM (clang) and the Visual Studio C++ build tools. Building the installer also needs the [WiX Toolset 3.14](https://github.com/wixtoolset/wix3/releases) (`wix314-binaries.zip` is enough).
-
-```
-pip install llvmlite pyinstaller pillow
-python Compiler/main.py Examples/01_hello.vp
-```
-
-To build everything for a release (`vamp.exe`, the extension `.vsix` and `Vamp-<version>-x64.msi`, all in `release/`):
-
-```
-python Installer/build_release.py --version 1.0.0 --wix C:/path/to/wix314-binaries
-```
-
-`Installer/build_vsix.py` builds only the extension, ready to upload to the Visual Studio Code Marketplace.
-
-## License
-
-Vamp is released under the [MIT License](./LICENSE).
