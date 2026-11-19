@@ -17,7 +17,7 @@ struct Point : (
     val y : float
 )
 
-val pets : list[Animal] = [Dog("Max"), Cat("Tom"), Animal("Thing")]
+val pets : list[Animal] = [Dog("Max"), Cat("Luna"), Animal("Rocky")]
 for (pet) in (pets) : ( println(pet.describe()) )
 
 val p = Point(1.5, 2.0)

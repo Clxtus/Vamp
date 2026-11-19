@@ -4,10 +4,16 @@ release/
 Compiler/build/
 Compiler/test.vp
 *.exe
-!Compiler/dist/vamp.exe
 *.manifest
 *.pdb
 *.ilk
 *.obj
 !Examples/**/*.obj
 *.vsix
+docs/_site/
+.claude/
+DOCUMENTATION.md
+docs/pages/
+docs/publish.py
+.vscode/
+Compiler/dist/

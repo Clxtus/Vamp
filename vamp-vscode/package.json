@@ -23,7 +23,7 @@
     "color": "#1a0000",
     "theme": "dark"
   },
-  "version": "1.2.1",
+  "version": "1.3.0",
   "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
@@ -36,7 +36,10 @@
   "main": "./extension.js",
   "activationEvents": [
     "onLanguage:vamp",
-    "onLanguage:vampdata"
+    "onLanguage:vampdata",
+    "onDebugResolve:vamp",
+    "onDebugDynamicConfigurations:vamp",
+    "onDebugInitialConfigurations"
   ],
   "contributes": {
     "languages": [
@@ -91,7 +94,8 @@
     "commands": [
       {
         "command": "vamp.run",
-        "title": "Vamp: Run File"
+        "title": "Vamp: Run File",
+        "icon": "$(play)"
       },
       {
         "command": "vamp.test",
@@ -108,9 +112,69 @@
         "vamp.compiler": {
           "type": "string",
           "default": "",
-          "description": "Command that runs the Vamp compiler, for example \"vamp\" or \"python C:/path/Compiler/main.py\". Empty: use Compiler/main.py in the workspace, otherwise vamp on the PATH."
+          "description": "Command that runs the Vamp compiler, for example \"vamp\" or \"python C:/path/Compiler/main.py\". Empty: Compiler/main.py in the workspace, then the installed vamp.exe, then vamp on the PATH."
         }
       }
-    }
+    },
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "vamp.run",
+          "when": "resourceLangId == vamp",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "debuggers": [
+      {
+        "type": "vamp",
+        "label": "Vamp",
+        "languages": [
+          "vamp"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "The .vp file to build and run.",
+                "default": "${file}"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Command line arguments for the program.",
+                "default": []
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "vamp",
+            "request": "launch",
+            "name": "Run Vamp File",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Vamp: Run File",
+            "description": "Build and run the current .vp file",
+            "body": {
+              "type": "vamp",
+              "request": "launch",
+              "name": "Run Vamp File",
+              "program": "^\"\\${file}\""
+            }
+          }
+        ]
+      }
+    ]
   }
 }

@@ -258,7 +258,7 @@ def make_wxs(payload, version):
     <Component Id="Shortcuts" Directory="VampMenu" Guid="{guid("shortcuts")}">
       <Shortcut Id="ExamplesShortcut" Name="Vamp Examples" Target="[INSTALLDIR]Examples" Icon="VampIcon" />
       <Shortcut Id="UninstallShortcut" Name="Uninstall Vamp" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" Icon="VampIcon" />
-      <util:InternetShortcut Id="DocsShortcut" Name="Vamp Documentation" Target="{HOMEPAGE}/blob/main/DOCUMENTATION.md" />
+      <util:InternetShortcut Id="DocsShortcut" Name="Vamp Documentation" Target="https://clxtus.github.io/Vamp/" />
       <RemoveFolder Id="RemoveMenu" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\\Vamp" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
     </Component>
@@ -467,7 +467,7 @@ def main():
 
     for src in (compiler, vsix, ICON, DATA_ICON, os.path.join(ROOT, "LICENSE"),
 
-                   os.path.join(ROOT, "DOCUMENTATION.md"), os.path.join(ROOT, "README.md")):
+                   os.path.join(ROOT, "README.md")):
 
         shutil.copy2(src, payload)
 

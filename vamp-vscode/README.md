@@ -1,26 +1,26 @@
 # Vamp for Visual Studio Code
 
-Language support for [Vamp](https://github.com/Clxtus/Vamp), a compiled programming language for Windows with C-level speed, classes, generics, native windows and a built-in garbage collector.
+Language support for [Vamp](https://github.com/Clxtus/Vamp), a compiled programming language for Windows with C-level performance, classes, generics, native windows and a garbage collector.
 
 ## Features
 
 - Syntax highlighting for `.vp` source files and `.vpdata` asset files, with file icons for both.
-- Errors and warnings shown as you save, with the exact line and column.
-- Completion for keywords, types, your own functions and classes, and every library function (`os.`, `math.`, `json.` and the rest).
-- Hover to see a function's parameters and return type; Go to Definition for functions, classes and variables.
-- Format Document (`Shift+Alt+F`) using Vamp's own formatter.
-- Commands: **Vamp: Run File**, **Vamp: Run Tests in File** and **Vamp: Build for Debugging**.
-- Breakpoints in `.vp` files: build for debugging, then debug the `.exe` with the C/C++ extension (`cppvsdbg`).
+- Errors reported on save, with the exact line and column.
+- Completion for keywords, types, your own functions and classes, and every library function (`os.`, `math.`, `json.` and others).
+- Hover information showing a function's parameters and return type, and Go to Definition for functions, classes and variables.
+- Format Document (`Shift+Alt+F`) using Vamp's built-in formatter.
+- Run and debug with F5 in any folder. With Microsoft's C/C++ extension installed, breakpoints work directly in `.vp` files; Ctrl+F5 runs without the debugger.
+- Commands: **Vamp: Run File**, **Vamp: Run Tests in File** and **Vamp: Build for Debugging**, plus a run button in the editor title bar.
 
 ## Requirements
 
-Install Vamp first. The Vamp installer puts `vamp.exe` in `%LOCALAPPDATA%\Programs\Vamp` and on your `PATH`; the extension finds it automatically. Vamp uses LLVM (clang) and the Visual Studio C++ build tools to build programs, and the installer can set those up too.
+Vamp must be installed first. The installer places `vamp.exe` in `%LOCALAPPDATA%\Programs\Vamp` and adds it to the `PATH`, where the extension finds it automatically. Building programs also requires LLVM (clang) and the Visual Studio C++ build tools, which the installer can set up.
 
 ## Settings
 
 | Setting | Description |
 |---|---|
-| `vamp.compiler` | The command that runs the Vamp compiler, for example `vamp` or `python C:/path/Compiler/main.py`. Leave empty to use `Compiler/main.py` in the open folder, then the installed `vamp.exe`, then `vamp` on the `PATH`. |
+| `vamp.compiler` | The command that runs the compiler, such as `vamp` or `python C:/path/Compiler/main.py`. When empty, the extension uses `Compiler/main.py` in the open folder, then the installed `vamp.exe`, then `vamp` on the `PATH`. |
 
 ## Example
 
@@ -33,7 +33,7 @@ class Player : (
     func hit(damage : int) : ( self.health -= damage )
 )
 
-val hero = Player("Emma", 100)
+val hero = Player("Ryan", 100)
 hero.hit(25)
 println(f"{hero.name} has {hero.health} health, model scale {models.player.scale}")
 ```

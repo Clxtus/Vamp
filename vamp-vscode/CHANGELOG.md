@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+- F5 runs the current `.vp` file in any folder, no `launch.json` needed. With Microsoft's C/C++ extension installed it stops at breakpoints; without it, the program just runs.
+- Ctrl+F5 builds and runs without the debugger.
+- A run button in the editor title bar for `.vp` files.
+- Build errors show up in a "Vamp" output panel.
+
 ## 1.2.1
 
 - `.vpdata` files use the same colors as `.vp` files for everything they share.

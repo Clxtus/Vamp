@@ -4,8 +4,8 @@ scores.sort()
 println(scores)
 println(scores[1:3])
 
-val ages : map[str, int] = {"Emma": 36, "Jake": 45}
-ages["Lucy"] = 28
+val ages : map[str, int] = {"Emma": 31, "Jake": 27}
+ages["Lucy"] = 24
 for (person) in (ages) : ( println(person + " is " + str(ages[person])) )
 
 val passed = scores.filter(func (score : int) : bool : ( return : bool (score >= 70) ))

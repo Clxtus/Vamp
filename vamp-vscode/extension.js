@@ -256,6 +256,107 @@ function activate(context) {
     });
   }
 
+  const output = vscode.window.createOutputChannel("Vamp");
+  context.subscriptions.push(output);
+
+  function terminalFor(folder) {
+    let terminal = vscode.window.terminals.find((item) => item.name === "Vamp");
+    if (!terminal) {
+      terminal = vscode.window.createTerminal({ name: "Vamp", cwd: folder, shellPath: "powershell.exe" });
+    }
+    terminal.show();
+    return terminal;
+  }
+
+  function quote(part) {
+    return /[\s'&()]/.test(part) ? `'${part.replace(/'/g, "''")}'` : part;
+  }
+
+  async function build(document, debug) {
+    const name = path.basename(document.uri.fsPath);
+    const args = [document.uri.fsPath, ...(debug ? ["--debug"] : [])];
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: `Building ${name}` },
+      () => runCompiler(document, args));
+    if (result.error) {
+      output.clear();
+      output.append(result.stdout + result.stderr);
+      const missing = result.error.code === "ENOENT";
+      const choice = await vscode.window.showErrorMessage(
+        missing ? "Vamp: couldn't start the compiler. Install Vamp or set 'vamp.compiler'."
+          : `Vamp: ${name} didn't build.`,
+        "Show Output");
+      if (choice) output.show(true);
+      return null;
+    }
+    return document.uri.fsPath.replace(/\.vp$/i, ".exe");
+  }
+
+  async function runProgram(exe, args) {
+    const terminal = terminalFor(path.dirname(exe));
+    terminal.sendText(`Set-Location ${quote(path.dirname(exe))}; & ${[exe, ...args].map(quote).join(" ")}`);
+  }
+
+  async function documentFor(program) {
+    const open = vscode.workspace.textDocuments.find((item) => item.uri.fsPath === program);
+    const document = open || await vscode.workspace.openTextDocument(program);
+    if (document.isDirty) await document.save();
+    return document;
+  }
+
+  const fileConfiguration = { type: "vamp", request: "launch", name: "Run Vamp File", program: "${file}" };
+
+  // F5 builds w/ --debug then hands off to cppvsdbg (needs ms-vscode.cpptools).
+  // no cpptools or ctrl+F5 -> just build + run in the terminal
+  context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider("vamp", {
+    provideDebugConfigurations() {
+      return [fileConfiguration];
+    },
+    resolveDebugConfiguration(folder, config) {
+      if (!config.type && !config.request && !config.name) {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== "vamp") {
+          vscode.window.showInformationMessage("Open a .vp file to run it.");
+          return undefined;
+        }
+        return { ...fileConfiguration };
+      }
+      return config;
+    },
+    async resolveDebugConfigurationWithSubstitutedVariables(folder, config) {
+      const program = config.program;
+      if (!program || !/\.vp$/i.test(program) || !fs.existsSync(program)) {
+        vscode.window.showErrorMessage("Vamp: 'program' has to be a .vp file.");
+        return undefined;
+      }
+      const debuggerInstalled = Boolean(vscode.extensions.getExtension("ms-vscode.cpptools"));
+      const debug = !config.noDebug && debuggerInstalled;
+      const exe = await build(await documentFor(program), debug);
+      if (!exe) return undefined;
+      if (!debug) {
+        runProgram(exe, config.args || []);
+        if (!config.noDebug && !debuggerInstalled) {
+          vscode.window.showInformationMessage(
+            "Running without breakpoints. Install Microsoft's C/C++ extension to debug Vamp code.",
+            "Install").then((choice) => {
+              if (choice) vscode.commands.executeCommand("workbench.extensions.installExtension", "ms-vscode.cpptools");
+            });
+        }
+        return undefined;
+      }
+      return {
+        type: "cppvsdbg",
+        request: "launch",
+        name: config.name || "Run Vamp File",
+        program: exe,
+        args: config.args || [],
+        cwd: path.dirname(exe),
+        console: "integratedTerminal",
+        stopAtEntry: false,
+      };
+    },
+  }));
+
   context.subscriptions.push(
     vscode.commands.registerCommand("vamp.run", () => runInTerminal((file) => ["run", file])),
     vscode.commands.registerCommand("vamp.test", () => runInTerminal((file) => ["test", file])),
