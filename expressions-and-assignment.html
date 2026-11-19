@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expressions and assignment — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="current" href="expressions-and-assignment.html">Expressions and assignment</a><ul class="local"><li><a href="#picking-a-value-a-if-condition-else-b">Picking a value: a if condition else b</a></li></ul></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Language <span>&rsaquo;</span> Expressions and assignment</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="expressions-and-assignment">Expressions and assignment</h1><div class="table"><table>
+<thead>
+<tr>
+<th>Operators</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code></td>
+<td>Arithmetic. <code>%</code> is the remainder and <code>-x</code> negates.</td>
+</tr>
+<tr>
+<td><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td>
+<td>Comparison, producing a <code>bool</code>. Strings compare alphabetically; booleans and enums support only <code>==</code> and <code>!=</code>.</td>
+</tr>
+<tr>
+<td><code>and</code> <code>or</code> <code>not</code></td>
+<td>Logical operators on <code>bool</code> values. <code>and</code> and <code>or</code> stop as soon as the result is known, so the right side may not run.</td>
+</tr>
+<tr>
+<td><code>&amp;&amp;</code> <code>\|\|</code> <code>!</code></td>
+<td>The same operators written as symbols: <code>&amp;&amp;</code> is <code>and</code>, <code>\|\|</code> is <code>or</code>, <code>!</code> is <code>not</code>. Either form can be used.</td>
+</tr>
+<tr>
+<td><code>&amp;</code> <code>\|</code> <code>^</code> <code>~</code> <code>&lt;&lt;</code> <code>&gt;&gt;</code></td>
+<td>Bitwise and, or, xor, not, shift left, shift right, on whole numbers.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Precedence, from lowest to highest: <code>or</code> <code>||</code>, <code>and</code> <code>&amp;&amp;</code>, <code>not</code>, comparisons, <code>|</code>, <code>^</code>, <code>&amp;</code>, <code>&lt;&lt;</code> <code>&gt;&gt;</code>, <code>+</code> <code>-</code>, <code>*</code> <code>/</code> <code>%</code>, then unary <code>-</code> <code>!</code> <code>~</code>. Use parentheses when in doubt.</p>
+<p><code>not</code> applies to the whole comparison after it, so <code>not lives == 0</code> means <code>not (lives == 0)</code>. <code>!</code> applies only to the value immediately after it, so it requires parentheses: <code>!(lives == 0)</code>.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">lives</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="n">paused</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;playing&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">lives</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="n">paused</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;playing&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">)</span><span class="w">   </span><span class="c1">// equivalent</span>
+<span class="k">val</span><span class="w"> </span><span class="n">low_bits</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">flags</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mh">0x0F</span>
+<span class="k">val</span><span class="w"> </span><span class="n">even</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span>
+</code></pre></div>
+<p>Variables, fields and elements can be updated with <code>=</code>, <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code>, <code>%=</code>, <code>&amp;=</code>, <code>|=</code>, <code>^=</code>, <code>&lt;&lt;=</code> and <code>&gt;&gt;=</code>:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="n">count</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">1</span>
+<span class="n">player</span><span class="p">.</span><span class="na">score</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span>
+<span class="n">scores</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">-=</span><span class="w"> </span><span class="mi">5</span>
+</code></pre></div>
+<p>Whole-number division or <code>%</code> by zero throws an error (<code>division by zero</code>), which can be caught with <code>try</code>.</p>
+<h2 id="picking-a-value-a-if-condition-else-b">Picking a value: <code>a if condition else b</code></h2>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">label</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;big&quot;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">size</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;small&quot;</span>
+<span class="k">val</span><span class="w"> </span><span class="n">speed</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">2.5</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">boosted</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="mi">1</span>
+</code></pre></div>
+<p>Both sides must have the same type. A number literal on one side takes the type of the other.</p>
+<p><code>+</code> also concatenates strings:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;count: &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">str</span><span class="p">(</span><span class="n">count</span><span class="p">))</span>
+</code></pre></div><div class="pager"><a class="previous" href="types-variables-and-constants.html"><span>Previous</span>Types, variables, and constants</a><a class="next" href="functions-and-returns.html"><span>Next</span>Functions and returns</a></div></article>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li class="level-2"><a href="#picking-a-value-a-if-condition-else-b">Picking a value: a if condition else b</a></li></ul></aside>
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changing, querying, and removing interfaces — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="current" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Windows and interfaces <span>&rsaquo;</span> Changing, querying, and removing interfaces</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="changing-querying-and-removing-interfaces">Changing, querying, and removing interfaces</h1><p>Every control created with <code>os.Make_Interface</code> can be changed afterwards. Like the creation call, each function takes the window title and control name as string literals, and the control must belong to a window created by the program.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">os</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">window</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Window</span><span class="p">(</span><span class="s2">&quot;Search&quot;</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Search&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;status&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">260</span><span class="p">,</span><span class="w"> </span><span class="mi">36</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Ready&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">background_color</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;#FFFFFF&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">background_transparency</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0</span>
+<span class="p">))</span>
+
+<span class="nn">os</span><span class="p">.</span><span class="nf">Set_Interface_Text</span><span class="p">(</span><span class="s2">&quot;Search&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;status&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Searching...&quot;</span><span class="p">)</span>
+<span class="nn">os</span><span class="p">.</span><span class="nf">Set_Interface_Text_Color</span><span class="p">(</span><span class="s2">&quot;Search&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;status&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;#0e9e86&quot;</span><span class="p">)</span>
+<span class="nn">os</span><span class="p">.</span><span class="nf">Set_Interface_Background_Transparency</span><span class="p">(</span><span class="s2">&quot;Search&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;status&quot;</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5</span><span class="p">)</span>
+<span class="nn">os</span><span class="p">.</span><span class="nf">Set_Interface_Position</span><span class="p">(</span><span class="s2">&quot;Search&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;status&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">60</span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="nn">os</span><span class="p">.</span><span class="nf">Get_Interface_Width</span><span class="p">(</span><span class="s2">&quot;Search&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;status&quot;</span><span class="p">))</span>
+</code></pre></div>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>os.Get_Interface(window_title, name)</code></td>
+<td>Whether the control exists.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Text(window_title, name, text)</code></td>
+<td>Replaces a label's or button's text. <code>text</code> can be any string expression.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Visible(window_title, name, visible)</code></td>
+<td>Shows or hides the control.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Enabled(window_title, name, enabled)</code></td>
+<td>Enables or disables the control. A disabled button no longer reports clicks.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Editable(window_title, name, editable)</code></td>
+<td>Allows or blocks typing in a label created with <code>editable = true</code>.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Position(window_title, name, x, y)</code></td>
+<td>Moves the control, in pixels from the window's top-left corner.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Size(window_title, name, width, height)</code></td>
+<td>Resizes the control. Both values must be positive.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Layer(window_title, name, layer)</code></td>
+<td>Changes its <code>layer</code> and reorders it using the same rules as creation.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Text_Color(window_title, name, color)</code></td>
+<td>Text color of a label or button; <code>color</code> is a <code>"#RRGGBB"</code> literal.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Background_Color(window_title, name, color)</code></td>
+<td>Background color as a <code>"#RRGGBB"</code> literal. Keeps the current transparency.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Background_Transparency(window_title, name, amount)</code></td>
+<td>Background opacity from <code>0.0</code> (invisible) to <code>1.0</code> (solid), same as <code>background_transparency</code>. <code>amount</code> can be a literal or any <code>float</code> or <code>int</code> expression. A literal outside the range is a compile error; a value computed at run time is clamped. A control with no background color yet uses white.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Icon(window_title, name, path)</code></td>
+<td>Replaces the image of an <code>icon</code> control or of a button created with <code>icon</code>. The old image is released.</td>
+</tr>
+<tr>
+<td><code>os.Focus_Interface(window_title, name)</code></td>
+<td>Moves keyboard focus to the control.</td>
+</tr>
+<tr>
+<td><code>os.Remove_Interface(window_title, name)</code></td>
+<td>Destroys the control. Any pending click is discarded. The name stays reserved, so it cannot be created again.</td>
+</tr>
+<tr>
+<td><code>os.Get_Interface_X(window_title, name)</code>, <code>os.Get_Interface_Y(window_title, name)</code></td>
+<td>The control's position in pixels from the window's top-left corner.</td>
+</tr>
+<tr>
+<td><code>os.Get_Interface_Width(window_title, name)</code>, <code>os.Get_Interface_Height(window_title, name)</code></td>
+<td>The control's size in pixels.</td>
+</tr>
+<tr>
+<td><code>os.Interface_Visible(window_title, name)</code></td>
+<td>Whether the control itself is set to visible.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Functions that change a control return <code>true</code> on success. If the window or control cannot be found they print an error and return <code>false</code>, and the getters return <code>-1</code>.</p>
+<p>The following rules are checked at compile time:</p>
+<ul>
+<li>Each function only accepts the control types it supports: <code>Set_Interface_Text</code> and <code>Set_Interface_Text_Color</code> need a label or button, <code>Set_Interface_Icon</code> needs an <code>icon</code> control or a button made with <code>icon</code>, and <code>Set_Interface_Editable</code> needs an editable label. The check applies even when the call appears before the control's <code>os.Make_Interface</code>.</li>
+<li>A button made without <code>background_color</code> or <code>background_transparency</code> is a standard Windows button that draws its own colors. To change its text color or background later, create it with a background property.</li>
+<li>Every control name used in these calls must be created somewhere in the program.</li>
+</ul>
+<p>Interface functions identify the window by the title used in <code>os.Make_Interface</code>, so renaming it with <code>os.Set_Window_Title</code> does not affect them. Setting a text color replaces it exactly; the blending from <code>text_transparency</code> is applied only at creation.</p>
+<p>Changes are applied on the thread that owns the window, so they are safe to call from a polling loop. Each call sends a single message to the window, and the window handle is cached between calls.</p><div class="pager"><a class="previous" href="native-interface-controls.html"><span>Previous</span>Native interface controls</a><a class="next" href="interface-groups.html"><span>Next</span>Interface groups</a></div></article>
+    </main>
+    
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

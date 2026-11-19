@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control flow — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="current" href="control-flow.html">Control flow</a><ul class="local"><li><a href="#if-else-if-else">if, else if, else</a></li><li><a href="#while-loops">while loops</a></li><li><a href="#for-loops">for loops</a></li><li><a href="#break-and-continue">break and continue</a></li><li><a href="#match">match</a></li></ul></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Language <span>&rsaquo;</span> Control flow</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="control-flow">Control flow</h1><h2 id="if-else-if-else"><code>if</code>, <code>else if</code>, <code>else</code></h2>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">score</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">90</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;A&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">score</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;B&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="k">else</span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;Keep practicing&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Conditions must be <code>bool</code> expressions.</p>
+<h2 id="while-loops"><code>while</code> loops</h2>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">remaining</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">3</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">remaining</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="n">remaining</span><span class="p">)</span>
+<span class="w">    </span><span class="n">remaining</span><span class="w"> </span><span class="o">-=</span><span class="w"> </span><span class="mi">1</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The condition is checked before each iteration.</p>
+<h2 id="for-loops"><code>for</code> loops</h2>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Emma&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Jake&quot;</span><span class="p">]</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="n">names</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Arrays are iterated in index order. Iterating over a dictionary yields its field names in declaration order, and <code>dictionary.values</code> yields the values in that order. A <code>for</code> loop also iterates over lists (elements), maps (keys, in the order they were added) and strings (characters, as <code>char</code>).</p>
+<p>Use <code>range</code> to count:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">)</span><span class="w">            </span><span class="c1">// 0 1 2 3 4</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">)</span><span class="w">         </span><span class="c1">// 2 3 4 5</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">2</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">)</span><span class="w">    </span><span class="c1">// 10 8 6 4 2</span>
+</code></pre></div>
+<p><code>range(stop)</code>, <code>range(start, stop)</code> and <code>range(start, stop, step)</code> take <code>int</code> values; <code>stop</code> itself is not included.</p>
+<h2 id="break-and-continue"><code>break</code> and <code>continue</code></h2>
+<p>In any <code>while</code> or <code>for</code> loop, <code>break</code> exits the loop and <code>continue</code> skips to the next iteration.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="n">names</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="k">continue</span><span class="w"> </span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="s2">&quot;stop&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="k">break</span><span class="w"> </span><span class="p">)</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+<h2 id="match"><code>match</code></h2>
+<p><code>match</code> compares a value against the patterns of each branch in order and runs the first branch that matches. A branch can list several patterns. <code>else</code> is optional and must come last; without it, a value that matches no pattern runs nothing.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">match</span><span class="w"> </span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="s2">&quot;w&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;up&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nf">move</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="w">    </span><span class="s2">&quot;s&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;down&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nf">move</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;unknown key&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>The value can be a number, <code>str</code>, <code>char</code>, <code>bool</code> or enum, and the patterns must be of the same type.</p><div class="pager"><a class="previous" href="functions-and-returns.html"><span>Previous</span>Functions and returns</a><a class="next" href="strings.html"><span>Next</span>Strings</a></div></article>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li class="level-2"><a href="#if-else-if-else">if, else if, else</a></li><li class="level-2"><a href="#while-loops">while loops</a></li><li class="level-2"><a href="#for-loops">for loops</a></li><li class="level-2"><a href="#break-and-continue">break and continue</a></li><li class="level-2"><a href="#match">match</a></li></ul></aside>
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

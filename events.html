@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Events — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="current" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Windows and interfaces <span>&rsaquo;</span> Events</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="events">Events</h1><p>Instead of a polling loop, a program can attach functions to events and let <code>os.Run_Events()</code> call them. It runs until every window the program created is closed, or until <code>os.Stop_Events()</code> is called.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">os</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">window</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Window</span><span class="p">(</span><span class="s2">&quot;Counter&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">style</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;modern&quot;</span><span class="w"> </span><span class="p">))</span>
+<span class="k">val</span><span class="w"> </span><span class="n">counter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Counter&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;count&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">200</span><span class="p">,</span><span class="w"> </span><span class="mi">30</span><span class="p">),</span><span class="w"> </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">),</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0&quot;</span><span class="w"> </span><span class="p">))</span>
+<span class="k">val</span><span class="w"> </span><span class="n">more</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;button&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Counter&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;more&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">120</span><span class="p">,</span><span class="w"> </span><span class="mi">34</span><span class="p">),</span><span class="w"> </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">60</span><span class="p">),</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Add one&quot;</span><span class="w"> </span><span class="p">))</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">clicks</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="nn">os</span><span class="p">.</span><span class="nf">On_Click</span><span class="p">(</span><span class="s2">&quot;Counter&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;more&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">func</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">clicks</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="nn">os</span><span class="p">.</span><span class="nf">Set_Interface_Text</span><span class="p">(</span><span class="s2">&quot;Counter&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;count&quot;</span><span class="p">,</span><span class="w"> </span><span class="kt">str</span><span class="p">(</span><span class="n">clicks</span><span class="p">))</span>
+<span class="p">))</span>
+<span class="nn">os</span><span class="p">.</span><span class="nf">On_Key</span><span class="p">(</span><span class="s2">&quot;ESCAPE&quot;</span><span class="p">,</span><span class="w"> </span><span class="k">func</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Stop_Events</span><span class="p">()</span><span class="w"> </span><span class="p">))</span>
+<span class="nn">os</span><span class="p">.</span><span class="nf">Every</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span><span class="w"> </span><span class="k">func</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="si">f&quot;{</span><span class="n">clicks</span><span class="si">} clicks so far&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">))</span>
+<span class="nn">os</span><span class="p">.</span><span class="nf">Run_Events</span><span class="p">()</span>
+</code></pre></div>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>os.On_Click(window_title, name, function)</code></td>
+<td>Calls <code>function</code> each time the button is clicked.</td>
+</tr>
+<tr>
+<td><code>os.On_Key(key, function)</code></td>
+<td>Calls <code>function</code> each time the key is pressed (same key names as the <code>input</code> library, as a string literal).</td>
+</tr>
+<tr>
+<td><code>os.Every(milliseconds, function)</code></td>
+<td>Calls <code>function</code> repeatedly at the given interval.</td>
+</tr>
+<tr>
+<td><code>os.Run_Events()</code>, <code>os.Stop_Events()</code></td>
+<td>Start handling events; stop and continue after <code>Run_Events()</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<p>The functions are <code>func ()</code> values, either named functions or functions written inline. Calling <code>On_Click</code> again for the same button replaces its function.</p><div class="pager"><a class="previous" href="interface-groups.html"><span>Previous</span>Interface groups</a><a class="next" href="drawing-on-a-canvas.html"><span>Next</span>Drawing on a canvas</a></div></article>
+    </main>
+    
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

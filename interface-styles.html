@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interface styles — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="current" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Windows and interfaces <span>&rsaquo;</span> Interface styles</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="interface-styles">Interface styles</h1><p>Every window draws its controls in one of three styles, similar to Python's tkinter, ttk and CustomTkinter:</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Style</th>
+<th>Look</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"classic"</code></td>
+<td>The legacy Windows look: flat grey buttons, bold system font, labels on grey boxes.</td>
+</tr>
+<tr>
+<td><code>"native"</code></td>
+<td>The default. Themed Windows 10/11 controls in Segoe UI, as in most Windows applications. Labels sit directly on the window and text boxes have a border.</td>
+</tr>
+<tr>
+<td><code>"modern"</code></td>
+<td>Flat, rounded controls drawn by Vamp, CustomTkinter style: blue buttons that darken on hover and press (with a hand cursor), rounded text boxes that light up when focused, rounded frames, and a light or dark theme.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">window</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Window</span><span class="p">(</span><span class="s2">&quot;App&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">480</span><span class="p">,</span><span class="w"> </span><span class="mi">320</span><span class="p">),</span>
+<span class="w">    </span><span class="n">style</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;modern&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">theme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;dark&quot;</span>
+<span class="p">))</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">save</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;button&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;App&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;save&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">140</span><span class="p">,</span><span class="w"> </span><span class="mi">36</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Save&quot;</span><span class="w">                       </span><span class="c1">// accent blue in the modern theme</span>
+<span class="p">))</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">delete</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;button&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;App&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;delete&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">140</span><span class="p">,</span><span class="w"> </span><span class="mi">36</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">180</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Delete&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">background_color</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;#c0392b&quot;</span><span class="p">,</span><span class="w">       </span><span class="c1">// custom colors still apply</span>
+<span class="w">    </span><span class="n">corner_radius</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">18</span><span class="w">                  </span><span class="c1">// half the height: a pill shape</span>
+<span class="p">))</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;App&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">300</span><span class="p">,</span><span class="w"> </span><span class="mi">34</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">76</span><span class="p">),</span>
+<span class="w">    </span><span class="n">editable</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">                     </span><span class="c1">// a rounded text box</span>
+<span class="p">))</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">legacy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;button&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;App&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;legacy&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">140</span><span class="p">,</span><span class="w"> </span><span class="mi">36</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">130</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Old look&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">style</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;classic&quot;</span><span class="w">                   </span><span class="c1">// one control can use a different style</span>
+<span class="p">))</span>
+</code></pre></div>
+<ul>
+<li>The window's <code>style</code> is the default for its controls, and a control's own <code>style</code> overrides it. A window that sets <code>style</code> needs its title as a string literal.</li>
+<li><code>corner_radius</code> (whole pixels, <code>0</code> for square) works on modern controls. Defaults: 6 for buttons, text boxes and labels with a background, 8 for frames.</li>
+<li>In the modern style every control has theme colors, so <code>text_color</code>, <code>background_color</code> and <code>background_transparency</code> are optional. When set, they replace the theme colors, and <code>os.Set_Interface_Text_Color</code> and the other setters work on every modern control, including buttons without a background.</li>
+<li>A modern control fills its rounded corners with whatever lies behind it: the frame or colored control it sits on, or the window.</li>
+<li><code>theme</code> only affects <code>"modern"</code> windows. A native or classic control in a dark modern window keeps its own light look.</li>
+</ul><div class="pager"><a class="previous" href="the-os-library.html"><span>Previous</span>The <code>os</code> library</a><a class="next" href="native-interface-controls.html"><span>Next</span>Native interface controls</a></div></article>
+    </main>
+    
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

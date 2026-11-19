@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imports — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="current" href="imports.html">Imports</a><ul class="local"><li><a href="#renaming-with-as">Renaming with as</a></li><li><a href="#picking-names-with-from">Picking names with from</a></li><li><a href="#importing-vamp-files">Importing Vamp files</a></li><li><a href="#packages">Packages</a></li><li><a href="#data-files-vpdata">Data files (.vpdata)</a></li><li><a href="#importing-c-and-c-libraries">Importing C and C++ libraries</a></li><li><a href="#compiler-error-messages">Compiler error messages</a></li></ul></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Program structure <span>&rsaquo;</span> Imports</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="imports">Imports</h1><p>Import a built-in library by name, or bind a source file to a name:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">os</span>
+<span class="k">import</span><span class="w"> </span><span class="n">helpers</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;helpers.vp&quot;</span>
+</code></pre></div>
+<h2 id="renaming-with-as">Renaming with <code>as</code></h2>
+<p><code>as</code> gives a library or file a different name, as in Python:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">os</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">system</span>
+<span class="k">import</span><span class="w"> </span><span class="n">helpers</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;helpers.vp&quot;</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">h</span>
+<span class="k">import</span><span class="w"> </span><span class="s2">&quot;helpers.vp&quot;</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">h2</span>
+
+<span class="n">system</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">h</span><span class="p">.</span><span class="nf">add</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span>
+</code></pre></div>
+<p>Once a library is imported under another name, the original name is no longer bound (<code>os.Sleep(1)</code> is an error suggesting <code>system.Sleep(1)</code>). A file can be imported with <code>import name : "file.vp"</code> or with <code>import "file.vp"</code> (the name is the file name without <code>.vp</code>); both forms accept <code>as</code>.</p>
+<h2 id="picking-names-with-from">Picking names with <code>from</code></h2>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">from</span><span class="w"> </span><span class="n">os</span><span class="w"> </span><span class="k">import</span><span class="w"> </span><span class="nc">Sleep</span><span class="p">,</span><span class="w"> </span><span class="nc">Directory_Exists</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">exists</span>
+<span class="k">from</span><span class="w"> </span><span class="n">helpers</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;helpers.vp&quot;</span><span class="w"> </span><span class="k">import</span><span class="w"> </span><span class="n">add</span><span class="p">,</span><span class="w"> </span><span class="n">twice</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">dbl</span><span class="p">,</span><span class="w"> </span><span class="nc">Point</span>
+<span class="k">from</span><span class="w"> </span><span class="n">os</span><span class="w"> </span><span class="k">import</span><span class="w"> </span><span class="o">*</span>
+
+<span class="nc">Sleep</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">sum</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span>
+</code></pre></div>
+<p><code>from X import a, b as c</code> binds only the listed names. <code>from X import *</code> binds every public name (names starting with <code>_</code> are skipped). A <code>from</code> import does not bind the library or file name itself. Classes, structs, enums and interfaces can also be renamed: <code>from shapes : "shapes.vp" import Point as P</code> makes <code>P</code> a name for <code>Point</code> in types and calls.</p>
+<p>Rules that apply to every import:</p>
+<ul>
+<li>Imports must be at the top level of a file, not inside a function, loop or class.</li>
+<li>Two imports cannot bind the same name, and a function cannot reuse an imported name.</li>
+<li>Import paths are resolved relative to the importing file. A file imported twice is compiled once.</li>
+<li>Circular imports are an error that shows the full chain.</li>
+</ul>
+<h2 id="importing-vamp-files">Importing Vamp files</h2>
+<p>An imported <code>.vp</code> file may contain only <code>func</code>, <code>class</code>, <code>struct</code>, <code>enum</code> and <code>interface</code> declarations, <code>const</code> constants, <code>test</code> blocks and imports. Classes, structs, enums and interfaces keep one global name across all files, so they are used by that name (or imported under another one). Functions and constants are namespaced per file, so <code>add</code> in <code>helpers.vp</code> never clashes with another <code>add</code>. Calls compile to direct calls, and functions that are never called are left out of the program.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">shapes</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shapes.vp&quot;</span>
+<span class="k">from</span><span class="w"> </span><span class="n">shapes</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shapes.vp&quot;</span><span class="w"> </span><span class="k">import</span><span class="w"> </span><span class="nc">MAX_SIZE</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nc">LIMIT</span>
+
+<span class="nb">println</span><span class="p">(</span><span class="n">shapes</span><span class="p">.</span><span class="na">MAX_SIZE</span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="nc">LIMIT</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="packages">Packages</h2>
+<p>A package is a folder of Vamp files inside a <code>vamp_packages</code> folder in the project. <code>vamp install</code> downloads one with git, and it is imported with <code>@</code> and its name.</p>
+<div class="code" data-language="Text"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code>vamp install https://github.com/someone/physics physics
+</code></pre></div>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">physics</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;@physics&quot;</span><span class="w">                  </span><span class="c1">// vamp_packages/physics/physics.vp</span>
+<span class="k">import</span><span class="w"> </span><span class="n">shapes</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;@physics/shapes.vp&quot;</span><span class="w">         </span><span class="c1">// another file of the package</span>
+</code></pre></div>
+<p>Vamp looks for <code>vamp_packages</code> in the importing file's folder first, then in each folder above it. <code>vamp packages</code> lists the installed packages and <code>vamp remove name</code> deletes one.</p>
+<h2 id="data-files-vpdata">Data files (<code>.vpdata</code>)</h2>
+<p>A <code>.vpdata</code> file lists the assets a program uses, such as models, textures, fonts, sounds and animations. Use one file per kind of asset, for example <code>Models.vpdata</code>, <code>Textures.vpdata</code> and <code>Animations.vpdata</code>. Each entry starts with <code>object</code>, a name in quotes, and its properties:</p>
+<div class="code" data-language="Vamp data"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">object</span><span class="w"> </span><span class="nc">&quot;player&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">      </span><span class="na">type</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;.obj&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="na">path</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/objects/player.obj&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="na">size</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">),</span>
+<span class="w">      </span><span class="na">position</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">),</span>
+<span class="w">      </span><span class="na">scale</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mf">1.5</span><span class="p">,</span>
+<span class="w">      </span><span class="na">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Player&quot;</span>
+<span class="p">)</span>
+
+<span class="k">object</span><span class="w"> </span><span class="nc">&quot;tree&quot;</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">      </span><span class="na">path</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;objects/tree.obj&quot;</span>
+<span class="w">      </span><span class="na">scale</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span>
+<span class="p">)</span>
+</code></pre></div>
+<ul>
+<li><code>path</code> is required. It is relative to the <code>.vpdata</code> file's folder (a leading <code>/</code> has the same meaning), and the file must exist at compile time.</li>
+<li><code>type</code> is optional and defaults to the file extension (<code>".obj"</code> above).</li>
+<li>All other properties are user-defined. A value can be text in quotes, a number, <code>true</code>/<code>false</code>, a group <code>(x, y, z)</code> or a list <code>[a, b, c]</code>. Groups and lists hold one kind of value; if whole numbers and decimals are mixed, all of them become <code>float</code>.</li>
+<li>Commas between properties are optional. Names follow the same rules as variable names, so code can refer to <code>models.player</code>.</li>
+<li><code>//</code> and <code>/* */</code> comments work as in <code>.vp</code> files.</li>
+</ul>
+<p>A data file is imported like a Vamp file. Each object becomes a constant struct with its properties as fields, plus <code>id</code> (its name), <code>type</code>, <code>path</code> and <code>full_path</code> (the absolute path, resolved at compile time):</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">models</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Models.vpdata&quot;</span>
+
+<span class="nb">println</span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="na">player</span><span class="p">.</span><span class="na">path</span><span class="p">)</span><span class="w">            </span><span class="c1">// objects/player.obj</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="na">player</span><span class="p">.</span><span class="na">scale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w">       </span><span class="c1">// 3.000000</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="na">player</span><span class="p">.</span><span class="na">size</span><span class="p">)</span><span class="w">            </span><span class="c1">// (1, 2, 1)</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">entry</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="nf">all</span><span class="p">())</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w">       </span><span class="c1">// every object, in file order</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="n">entry</span><span class="p">.</span><span class="na">id</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s2">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">entry</span><span class="p">.</span><span class="na">type</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">models</span><span class="p">.</span><span class="nf">names</span><span class="p">())</span><span class="w">                </span><span class="c1">// [&quot;player&quot;, &quot;tree&quot;]</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">found</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">models</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="s2">&quot;tree&quot;</span><span class="p">)</span><span class="w">         </span><span class="c1">// DataEntry?, none if there&#39;s no such object</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">found</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">none</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="n">found</span><span class="p">.</span><span class="na">path</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+</code></pre></div>
+<p><code>all()</code> returns a <code>list[DataEntry]</code> and <code>get</code> returns a <code>DataEntry?</code>. A <code>DataEntry</code> only has the four shared fields (<code>id</code>, <code>type</code>, <code>path</code>, <code>full_path</code>), since objects can have different properties. An object's own properties are read through its name, as in <code>models.player.scale</code>. <code>import "Models.vpdata"</code> binds the name <code>Models</code>, and <code>from models : "Models.vpdata" import player</code> binds <code>player</code> directly.</p>
+<p>The data is built into the program, so reading it has no run-time cost. The asset files themselves are not copied into the program. <code>full_path</code> is the file's location on the machine that compiled the program, which is correct during development. A distributed program should open files using <code>path</code> and ship with the same folder layout (the <code>.vpdata</code> file's folder next to the program).</p>
+<h2 id="importing-c-and-c-libraries">Importing C and C++ libraries</h2>
+<p>A header or source file is imported like a Vamp file. Vamp asks clang for its declarations, so namespaces, overloads, <code>inline</code> and header-only code all work:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">mathlib</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mathlib.hpp&quot;</span>
+<span class="k">from</span><span class="w"> </span><span class="n">mathlib</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mathlib.hpp&quot;</span><span class="w"> </span><span class="k">import</span><span class="w"> </span><span class="n">is_even</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">even</span><span class="p">,</span><span class="w"> </span><span class="n">greet</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">area</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mathlib</span><span class="p">.</span><span class="nf">area</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w">       </span><span class="c1">// geo::area(int, int)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mathlib</span><span class="p">.</span><span class="nf">add</span><span class="p">(</span><span class="mf">1.5</span><span class="p">,</span><span class="w"> </span><span class="mf">2.5</span><span class="p">)</span><span class="w"> </span><span class="c1">// selects the float overload</span>
+<span class="nb">println</span><span class="p">(</span><span class="nf">even</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="nb">println</span><span class="p">(</span><span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;Vamp&quot;</span><span class="p">))</span>
+</code></pre></div>
+<ul>
+<li>Supported extensions: <code>.h .hh .hpp .hxx .c .cc .cpp .cxx</code>.</li>
+<li>A source file with the same name next to it (<code>mathlib.cpp</code> next to <code>mathlib.hpp</code>) is compiled and linked automatically.</li>
+<li>To link a prebuilt library, add <code>link "name"</code> after the path: <code>import sdl : "SDL.h" link "SDL2"</code> links <code>-lSDL2</code>. A value with a file extension, such as <code>link "libs/physics.lib"</code>, is passed as a file.</li>
+<li>Namespaces are flattened: <code>geo::area</code> becomes <code>mathlib.area</code>.</li>
+<li>Overloads are selected by the Vamp types of the arguments, which must match exactly.</li>
+<li>Type mapping: <code>int</code> ↔ any C integer type (passed as <code>long long</code>, then converted), <code>float</code> ↔ <code>float</code> or <code>double</code>, <code>bool</code> ↔ <code>bool</code>, <code>str</code> ↔ <code>const char *</code> or <code>std::string</code> (a returned <code>std::string</code> is copied into memory that is never freed automatically), plus <code>void</code> returns.</li>
+<li>Not yet supported: classes and structs, templates, global variables, enums, modifiable references (<code>int &amp;</code>), pointers other than <code>char *</code>, and variadic functions. Attempting to use one produces an error that names it and explains how to wrap it in a plain function.</li>
+<li>A C++ exception that escapes an imported function prints its message and stops the program.</li>
+<li>Only functions that are called are compiled in, and each call is a single direct call.</li>
+</ul>
+<h2 id="compiler-error-messages">Compiler error messages</h2>
+<p>Every error starts with <code>file:line:column</code>, shows the source line with a caret, and often ends with a hint:</p>
+<div class="code" data-language="Text"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code>main.vp:3:25: error: Library &#39;os&#39; has no method named &#39;Slep&#39;
+  3 | from os import Slep
+    |                ^^^^
+  hint: did you mean &#39;Sleep&#39;?
+</code></pre></div>
+<p>Errors inside an imported file name that file and add <code>note: while importing ...</code> lines showing the chain of imports.</p><div class="pager"><a class="previous" href="console-output-and-program-exit.html"><span>Previous</span>Console output and program exit</a><a class="next" href="memory.html"><span>Next</span>Memory</a></div></article>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li class="level-2"><a href="#renaming-with-as">Renaming with as</a></li><li class="level-2"><a href="#picking-names-with-from">Picking names with from</a></li><li class="level-2"><a href="#importing-vamp-files">Importing Vamp files</a></li><li class="level-2"><a href="#packages">Packages</a></li><li class="level-2"><a href="#data-files-vpdata">Data files (.vpdata)</a></li><li class="level-2"><a href="#importing-c-and-c-libraries">Importing C and C++ libraries</a></li><li class="level-2"><a href="#compiler-error-messages">Compiler error messages</a></li></ul></aside>
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

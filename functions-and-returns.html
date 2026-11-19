@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Functions and returns — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="current" href="functions-and-returns.html">Functions and returns</a><ul class="local"><li><a href="#default-values">Default values</a></li><li><a href="#overloading">Overloading</a></li><li><a href="#functions-as-values">Functions as values</a></li><li><a href="#generic-functions">Generic functions</a></li><li><a href="#returning-several-values-tuples">Returning several values: tuples</a></li></ul></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Language <span>&rsaquo;</span> Functions and returns</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="functions-and-returns">Functions and returns</h1><p>Functions take named, typed parameters, and the body is written in the second pair of parentheses:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="n">left</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="n">right</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="n">left</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">right</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="k">func</span><span class="w"> </span><span class="nf">announce</span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;Ready&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">void</span>
+<span class="p">)</span>
+</code></pre></div>
+<p><code>return : type (expression)</code> returns a value, <code>return : void</code> returns nothing. A function that returns a value must return on every path; a function that returns nothing may simply end.</p>
+<p>The return type can also be written in the header, between the parameters and the body:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">average</span><span class="p">(</span><span class="n">left</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">right</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="p">((</span><span class="n">left</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">right</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2.0</span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Parameters and results can be any type. Numbers, strings and structs are copied. Classes, lists and maps are shared.</p>
+<h2 id="default-values">Default values</h2>
+<p>A parameter with <code>= value</code> can be omitted by callers. Parameters with defaults must come last.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="n">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">times</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">times</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;Hello &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">name</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;Emma&quot;</span><span class="p">)</span>
+<span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;Emma&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="overloading">Overloading</h2>
+<p>Functions can share a name when their parameter types differ. The call selects the version that matches the arguments.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">show</span><span class="p">(</span><span class="n">value</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;number &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span><span class="w"> </span><span class="p">)</span>
+<span class="k">func</span><span class="w"> </span><span class="nf">show</span><span class="p">(</span><span class="n">value</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;text &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+
+<span class="nf">show</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="nf">show</span><span class="p">(</span><span class="s2">&quot;three&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>A function can be called before the line that declares it.</p>
+<h2 id="functions-as-values">Functions as values</h2>
+<p>Functions can be stored in variables, passed as arguments and returned. The type is <code>func(parameter types) : result type</code>; omit <code>: result type</code> for a function that returns nothing.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">twice</span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+
+<span class="k">func</span><span class="w"> </span><span class="nf">apply</span><span class="p">(</span><span class="n">f</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">func</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="nf">f</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+<span class="p">)</span>
+
+<span class="nb">println</span><span class="p">(</span><span class="nf">apply</span><span class="p">(</span><span class="n">twice</span><span class="p">,</span><span class="w"> </span><span class="mi">21</span><span class="p">))</span><span class="w">                      </span><span class="c1">// 42</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">greet</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">func</span><span class="p">(</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">func</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;hi &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">name</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;Jake&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p><code>func (parameters) : type : ( body )</code> without a name is a function written inline. It can use the surrounding local variables: it keeps its own copy of each one, taken when it is created, and changes it makes to that copy persist between calls.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">make_counter</span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">func</span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">val</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">func</span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="k">func</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">        </span><span class="n">count</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+<span class="w">    </span><span class="p">))</span>
+<span class="p">)</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">next_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">make_counter</span><span class="p">()</span>
+<span class="nf">next_id</span><span class="p">()</span>
+<span class="nb">println</span><span class="p">(</span><span class="nf">next_id</span><span class="p">())</span><span class="w">                             </span><span class="c1">// 2</span>
+</code></pre></div>
+<p>Top-level variables are shared rather than copied, so changing one inside a function value changes it everywhere.</p>
+<h2 id="generic-functions">Generic functions</h2>
+<p>Square brackets after the name list type parameters. The types are inferred from the arguments, or can be written explicitly at the call.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">biggest</span><span class="p">[</span><span class="nc">T</span><span class="p">](</span><span class="n">a</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="nc">T</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="nc">T</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="nc">T</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="nc">T</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">b</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="nb">println</span><span class="p">(</span><span class="nf">biggest</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">))</span><span class="w">                         </span><span class="c1">// 9</span>
+<span class="nb">println</span><span class="p">(</span><span class="nf">biggest</span><span class="p">(</span><span class="s2">&quot;pear&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;apple&quot;</span><span class="p">))</span><span class="w">              </span><span class="c1">// pear</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">biggest</span><span class="p">[</span><span class="kt">float</span><span class="p">](</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">))</span><span class="w">                  </span><span class="c1">// 2.000000</span>
+</code></pre></div>
+<p>Each combination of types is compiled separately, so generic code is as fast as code written for a single type.</p>
+<h2 id="returning-several-values-tuples">Returning several values: tuples</h2>
+<p><code>(T, U)</code> is a tuple type: a fixed group of values. A function can return one, and the caller can unpack it into several names.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">func</span><span class="w"> </span><span class="nf">divide</span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="n">b</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">quotient</span><span class="p">,</span><span class="w"> </span><span class="n">remainder</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">divide</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">pair</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;one&quot;</span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w">                               </span><span class="c1">// one</span>
+</code></pre></div>
+<p>Elements are read with a constant index such as <code>pair[0]</code>. Tuples cannot be modified after creation.</p><div class="pager"><a class="previous" href="expressions-and-assignment.html"><span>Previous</span>Expressions and assignment</a><a class="next" href="control-flow.html"><span>Next</span>Control flow</a></div></article>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li class="level-2"><a href="#default-values">Default values</a></li><li class="level-2"><a href="#overloading">Overloading</a></li><li class="level-2"><a href="#functions-as-values">Functions as values</a></li><li class="level-2"><a href="#generic-functions">Generic functions</a></li><li class="level-2"><a href="#returning-several-values-tuples">Returning several values: tuples</a></li></ul></aside>
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Types, variables, and constants — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="current" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Language <span>&rsaquo;</span> Types, variables, and constants</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="types-variables-and-constants">Types, variables, and constants</h1><p>The most common types are <code>int</code>, <code>float</code>, <code>bool</code> and <code>str</code>. <code>int</code> and <code>float</code> are the largest and most precise, and are the recommended defaults. The fixed-size types are intended for cases where size matters, such as large lists or binary file formats.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int</code> (or <code>i64</code>)</td>
+<td>Whole numbers, 64-bit, signed (roughly ±9.2 × 10¹⁸).</td>
+</tr>
+<tr>
+<td><code>i8</code>, <code>i16</code>, <code>i32</code></td>
+<td>Signed whole numbers, 8, 16 and 32 bits.</td>
+</tr>
+<tr>
+<td><code>u8</code>, <code>u16</code>, <code>u32</code>, <code>u64</code></td>
+<td>Unsigned whole numbers, 8, 16, 32 and 64 bits.</td>
+</tr>
+<tr>
+<td><code>float</code> (or <code>double</code>)</td>
+<td>64-bit decimal, about 15 significant digits.</td>
+</tr>
+<tr>
+<td><code>f32</code></td>
+<td>32-bit decimal, about 7 significant digits.</td>
+</tr>
+<tr>
+<td><code>char</code></td>
+<td>One byte, in single quotes: <code>'A'</code>, <code>'\n'</code>.</td>
+</tr>
+<tr>
+<td><code>bool</code></td>
+<td><code>true</code> or <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>str</code></td>
+<td>Text.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">population</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">8000000000</span>
+<span class="k">val</span><span class="w"> </span><span class="n">level</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">200</span>
+<span class="k">val</span><span class="w"> </span><span class="n">precise</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">3.141592653589793</span>
+<span class="k">val</span><span class="w"> </span><span class="n">letter</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">char</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="sc">&#39;A&#39;</span>
+<span class="k">val</span><span class="w"> </span><span class="n">mask</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0xFF</span><span class="w">          </span><span class="c1">// hex; 0b1010 is binary</span>
+<span class="k">val</span><span class="w"> </span><span class="n">distance</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.5e8</span><span class="w">   </span><span class="c1">// 150000000.0; 2e-3 is 0.002</span>
+</code></pre></div>
+<p>A number literal takes the type it is used with, so <code>val small : i32 = 5</code> and <code>small + 1</code> need no conversion. A literal that does not fit (<code>val level : u8 = 300</code>) will not compile. Values of two different number types are never mixed implicitly; convert one side, for example <code>int(small) + count</code>. <code>i64</code> and <code>int</code> are the same type, and so are <code>double</code> and <code>float</code>, so they mix freely. A whole-number literal too large for <code>int</code> is a <code>u64</code>.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span>
+<span class="k">const</span><span class="w"> </span><span class="n">title</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Vamp&quot;</span>
+</code></pre></div>
+<ul>
+<li><code>val</code> declares a mutable variable.</li>
+<li><code>const</code> declares an immutable constant and requires both a type and a value.</li>
+<li>A single <code>val</code> can omit its type when the value determines it.</li>
+<li>A typed <code>val</code> with no value starts with the default value: <code>0</code>, <code>0.0</code>, <code>false</code>, <code>""</code>, an empty list or map, or a struct with every field set to zero.</li>
+<li>A variable declared at the top of a file (outside any function, loop or <code>if</code>) is global. Every function in the file can read and modify it, including functions declared above it.</li>
+</ul>
+<p>Several variables of the same type can be declared together:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="n">z</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">30</span>
+<span class="k">val</span><span class="w"> </span><span class="n">first</span><span class="p">,</span><span class="w"> </span><span class="n">second</span><span class="p">,</span><span class="w"> </span><span class="n">third</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span>
+</code></pre></div>
+<p>When values are given, there must be one for each name.</p>
+<p>To convert a value, call the target type like a function:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">whole</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">int</span><span class="p">(</span><span class="mf">3.8</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">message</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">str</span><span class="p">(</span><span class="n">whole</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">decimal</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">float</span><span class="p">(</span><span class="n">whole</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">enabled</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">bool</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">small</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">i32</span><span class="p">(</span><span class="n">whole</span><span class="p">)</span>
+<span class="k">val</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">int</span><span class="p">(</span><span class="sc">&#39;A&#39;</span><span class="p">)</span><span class="w">        </span><span class="c1">// 65</span>
+<span class="k">val</span><span class="w"> </span><span class="n">text</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">str</span><span class="p">(</span><span class="sc">&#39;A&#39;</span><span class="p">)</span><span class="w">        </span><span class="c1">// &quot;A&quot;</span>
+</code></pre></div>
+<p>Every number type has a conversion call (<code>i8(...)</code> through <code>u64(...)</code>, <code>f32(...)</code>, <code>double(...)</code>, <code>char(...)</code>). Converting to a smaller type keeps the low bits, so <code>u8(300)</code> applied to a variable gives <code>44</code>.</p>
+<p><code>int(text)</code> and <code>float(text)</code> raise an error that can be caught with <code>try</code> if the text is not a number or does not fit, like <code>int("abc")</code>. Surrounding spaces are allowed. For user input, check the text with <code>text.is_number()</code> first.</p><div class="pager"><a class="previous" href="source-files-and-comments.html"><span>Previous</span>Source files and comments</a><a class="next" href="expressions-and-assignment.html"><span>Next</span>Expressions and assignment</a></div></article>
+    </main>
+    
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

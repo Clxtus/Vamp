@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lists and maps — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="current" href="lists-and-maps.html">Lists and maps</a><ul class="local"><li><a href="#lists">Lists</a></li><li><a href="#maps">Maps</a></li><li><a href="#sets">Sets</a></li></ul></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Collections <span>&rsaquo;</span> Lists and maps</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="lists-and-maps">Lists and maps</h1><p>Arrays and dictionaries have a fixed size, while lists and maps grow and shrink as the program runs. They are declared with their type and filled with the same <code>[ ]</code> and <code>{ }</code> literals.</p>
+<h2 id="lists">Lists</h2>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">scores</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">list</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">]</span>
+<span class="k">val</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">list</span><span class="p">[</span><span class="kt">str</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[]</span>
+
+<span class="n">scores</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
+<span class="n">scores</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">scores</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">scores</span><span class="p">.</span><span class="nf">length</span><span class="p">())</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">score</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="n">scores</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="n">score</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+</code></pre></div>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list.push(value)</code></td>
+<td>Adds a value at the end.</td>
+</tr>
+<tr>
+<td><code>list.pop()</code></td>
+<td>Removes and returns the last value.</td>
+</tr>
+<tr>
+<td><code>list.insert(index, value)</code></td>
+<td>Inserts before <code>index</code>, shifting the rest up.</td>
+</tr>
+<tr>
+<td><code>list.remove(index)</code></td>
+<td>Removes the value at <code>index</code>.</td>
+</tr>
+<tr>
+<td><code>list.clear()</code></td>
+<td>Removes every value.</td>
+</tr>
+<tr>
+<td><code>list.length()</code>, <code>len(list)</code></td>
+<td>The number of values.</td>
+</tr>
+<tr>
+<td><code>list.is_empty()</code></td>
+<td>Whether the list has no values.</td>
+</tr>
+<tr>
+<td><code>list.first()</code>, <code>list.last()</code></td>
+<td>First or last value.</td>
+</tr>
+<tr>
+<td><code>list.contains(value)</code></td>
+<td>Whether the list contains the value.</td>
+</tr>
+<tr>
+<td><code>list.index_of(value)</code></td>
+<td>Index of the first match, or <code>-1</code>.</td>
+</tr>
+<tr>
+<td><code>list.sort()</code></td>
+<td>Sorts numbers low to high and strings alphabetically.</td>
+</tr>
+<tr>
+<td><code>list.reverse()</code></td>
+<td>Reverses the order.</td>
+</tr>
+<tr>
+<td><code>list.copy()</code></td>
+<td>A separate list with the same values.</td>
+</tr>
+<tr>
+<td><code>list.join(separator)</code></td>
+<td>For <code>list[str]</code>: one string with <code>separator</code> between the values.</td>
+</tr>
+<tr>
+<td><code>list.filter(keep)</code></td>
+<td>A new list with the values where <code>keep(value)</code> is <code>true</code>.</td>
+</tr>
+<tr>
+<td><code>list.map(change)</code></td>
+<td>A new list of <code>change(value)</code> for each value; the element type is the type returned by <code>change</code>.</td>
+</tr>
+<tr>
+<td><code>list.for_each(action)</code></td>
+<td>Calls <code>action(value)</code> on each value.</td>
+</tr>
+<tr>
+<td><code>list.any(test)</code>, <code>list.all(test)</code></td>
+<td>Whether <code>test(value)</code> is <code>true</code> for at least one value, or for all of them.</td>
+</tr>
+<tr>
+<td><code>list.find_index(test)</code></td>
+<td>Index of the first value where <code>test(value)</code> is <code>true</code>, or <code>-1</code>.</td>
+</tr>
+<tr>
+<td><code>list.reduce(combine, start)</code></td>
+<td>Folds the list into one value, calling <code>combine(total, value)</code> for each value, starting from <code>start</code>.</td>
+</tr>
+<tr>
+<td><code>list.sort_by(comes_first)</code></td>
+<td>Sorts using a custom order: <code>comes_first(a, b)</code> returns <code>true</code> when <code>a</code> should come before <code>b</code>. Stable.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Elements can be of any type, including structs, classes and other lists (<code>list[list[int]]</code>). Reading or writing an index that does not exist raises an error that reports the index and the length, which can be caught with <code>try</code>.</p>
+<h2 id="maps">Maps</h2>
+<p>A map stores a value for each key. Keys can be <code>str</code>, <code>char</code> or any whole-number type.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">ages</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">map</span><span class="p">[</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="kt">int</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="s2">&quot;Emma&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">31</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Jake&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">27</span><span class="p">}</span>
+<span class="n">ages</span><span class="p">[</span><span class="s2">&quot;Lucy&quot;</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">24</span>
+<span class="n">ages</span><span class="p">[</span><span class="s2">&quot;Emma&quot;</span><span class="p">]</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">1</span>
+
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ages</span><span class="p">.</span><span class="nf">has</span><span class="p">(</span><span class="s2">&quot;Jake&quot;</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="n">ages</span><span class="p">[</span><span class="s2">&quot;Jake&quot;</span><span class="p">])</span><span class="w"> </span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">ages</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="s2">&quot;Nobody&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">))</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="n">ages</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="n">name</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s2">&quot; is &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="kt">str</span><span class="p">(</span><span class="n">ages</span><span class="p">[</span><span class="n">name</span><span class="p">]))</span><span class="w"> </span><span class="p">)</span>
+</code></pre></div>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>map[key] = value</code>, <code>map.set(key, value)</code></td>
+<td>Adds the key or replaces its value.</td>
+</tr>
+<tr>
+<td><code>map[key]</code></td>
+<td>The value for that key. A missing key raises an error (catchable with <code>try</code>).</td>
+</tr>
+<tr>
+<td><code>map.get(key, fallback)</code></td>
+<td>The value, or <code>fallback</code> if the key is not there.</td>
+</tr>
+<tr>
+<td><code>map.has(key)</code></td>
+<td>Whether the key is present.</td>
+</tr>
+<tr>
+<td><code>map.remove(key)</code></td>
+<td>Removes the key; returns whether it existed.</td>
+</tr>
+<tr>
+<td><code>map.length()</code>, <code>len(map)</code></td>
+<td>The number of keys.</td>
+</tr>
+<tr>
+<td><code>map.is_empty()</code>, <code>map.clear()</code></td>
+<td>As for lists.</td>
+</tr>
+<tr>
+<td><code>map.keys()</code>, <code>map.values()</code></td>
+<td>New lists of the keys or values, in the order the keys were added.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Lists and maps are shared, not copied: passing one to a function or assigning it to another variable creates a second reference to the same object. Use <code>list.copy()</code> when a separate copy is needed.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">scores</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">list</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">]</span>
+<span class="k">val</span><span class="w"> </span><span class="n">high</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">scores</span><span class="p">.</span><span class="nf">filter</span><span class="p">(</span><span class="k">func</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="p">))</span><span class="w">      </span><span class="c1">// [7, 9]</span>
+<span class="k">val</span><span class="w"> </span><span class="n">labels</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">scores</span><span class="p">.</span><span class="nf">map</span><span class="p">(</span><span class="k">func</span><span class="w"> </span><span class="p">(</span><span class="n">s</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">(</span><span class="si">f&quot;#{</span><span class="n">s</span><span class="si">}&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">))</span><span class="w">     </span><span class="c1">// [&quot;#7&quot;, &quot;#2&quot;, ...]</span>
+<span class="n">scores</span><span class="p">.</span><span class="nf">sort_by</span><span class="p">(</span><span class="k">func</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="p">))</span><span class="w">      </span><span class="c1">// highest first</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">scores</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">])</span><span class="w">                                                          </span><span class="c1">// [7, 4]</span>
+</code></pre></div>
+<p><code>list[start:end]</code> is a new list from <code>start</code> up to, but not including, <code>end</code>. Either side can be left out (<code>xs[:2]</code>, <code>xs[2:]</code>), and negative numbers count from the end (<code>xs[-2:]</code> is the last two).</p>
+<h2 id="sets">Sets</h2>
+<p>A set holds each value at most once, in the order the values were first added. Values can be <code>str</code>, <code>char</code> or whole numbers.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">seen</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">set</span><span class="p">[</span><span class="kt">str</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{}</span>
+<span class="n">seen</span><span class="p">.</span><span class="nf">add</span><span class="p">(</span><span class="s2">&quot;Emma&quot;</span><span class="p">)</span>
+<span class="n">seen</span><span class="p">.</span><span class="nf">add</span><span class="p">(</span><span class="s2">&quot;Emma&quot;</span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">seen</span><span class="p">.</span><span class="nf">length</span><span class="p">())</span><span class="w">                          </span><span class="c1">// 1</span>
+<span class="k">val</span><span class="w"> </span><span class="n">primes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">}</span>
+<span class="k">val</span><span class="w"> </span><span class="n">odd</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">set</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">}</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">primes</span><span class="p">.</span><span class="nf">intersection</span><span class="p">(</span><span class="n">odd</span><span class="p">))</span><span class="w">               </span><span class="c1">// {3, 5, 7}</span>
+</code></pre></div>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>set.add(value)</code>, <code>set.remove(value)</code></td>
+<td>Adds a value, or removes it (returns whether it was there).</td>
+</tr>
+<tr>
+<td><code>set.has(value)</code>, <code>set.contains(value)</code></td>
+<td>Whether the value is in the set.</td>
+</tr>
+<tr>
+<td><code>set.length()</code>, <code>len(set)</code>, <code>set.is_empty()</code>, <code>set.clear()</code></td>
+<td>As for lists.</td>
+</tr>
+<tr>
+<td><code>set.union(other)</code>, <code>set.intersection(other)</code>, <code>set.difference(other)</code></td>
+<td>New sets.</td>
+</tr>
+<tr>
+<td><code>set.is_subset(other)</code></td>
+<td>Whether every value is also in <code>other</code>.</td>
+</tr>
+<tr>
+<td><code>set.values()</code>, <code>set.copy()</code></td>
+<td>The values as a list, or a separate copy of the set.</td>
+</tr>
+</tbody>
+</table></div>
+<p>A <code>for</code> loop iterates over a set's values. <code>println</code> prints lists, maps, sets and tuples in the same form they are written: <code>[1, 2]</code>, <code>{"Emma": 31}</code>, <code>(1, "one")</code>.</p><div class="pager"><a class="previous" href="arrays-and-dictionaries.html"><span>Previous</span>Arrays and dictionaries</a><a class="next" href="classes.html"><span>Next</span>Classes</a></div></article>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li class="level-2"><a href="#lists">Lists</a></li><li class="level-2"><a href="#maps">Maps</a></li><li class="level-2"><a href="#sets">Sets</a></li></ul></aside>
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

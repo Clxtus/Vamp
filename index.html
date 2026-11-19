@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="current" href="index.html">Vamp documentation</a><ul class="local"><li><a href="#install">Install</a></li><li><a href="#your-first-program">Your first program</a></li><li><a href="#where-to-go-next">Where to go next</a></li></ul></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a></div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="home"><div class="hero">
+<img src="_static/icon.png" alt="Vamp logo">
+<div>
+<h1>Vamp documentation</h1>
+<p>Vamp is a compiled programming language for Windows. Programs are compiled through LLVM into small native <code>.exe</code> files that run at speeds comparable to C and C++, while memory is managed automatically.</p>
+</div>
+</div>
+
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">class</span><span class="w"> </span><span class="nc">Player</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">val</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span>
+<span class="w">    </span><span class="k">val</span><span class="w"> </span><span class="n">health</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span>
+<span class="w">    </span><span class="k">func</span><span class="w"> </span><span class="nf">hit</span><span class="p">(</span><span class="n">damage</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="na">health</span><span class="w"> </span><span class="o">-=</span><span class="w"> </span><span class="n">damage</span><span class="w"> </span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">hero</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">Player</span><span class="p">(</span><span class="s2">&quot;Ryan&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">100</span><span class="p">)</span>
+<span class="n">hero</span><span class="p">.</span><span class="nf">hit</span><span class="p">(</span><span class="mi">25</span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="si">f&quot;{</span><span class="n">hero</span><span class="p">.</span><span class="na">name</span><span class="si">} has {</span><span class="n">hero</span><span class="p">.</span><span class="na">health</span><span class="si">} health&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="install">Install</h2>
+<ol>
+<li>Download <code>Vamp-&lt;version&gt;-x64.msi</code> from the <a href="https://github.com/Clxtus/Vamp/releases/latest">releases page</a> and run it. It installs Vamp for the current user, sets up the Visual Studio Code extension and adds <code>vamp</code> to the <code>PATH</code>.</li>
+<li>On the last page, leave <strong>Download and install LLVM and the C++ build tools</strong> selected if they are not installed yet; Vamp requires them to build programs. They can also be installed later with <code>vamp setup</code>.</li>
+<li>Open a new terminal and run a program:</li>
+</ol>
+<div class="code" data-language="Text"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code>vamp run hello.vp
+</code></pre></div>
+<h2 id="your-first-program">Your first program</h2>
+<p>Save this as <code>hello.vp</code>:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Vamp&quot;</span>
+
+<span class="k">func</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="n">person</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">times</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">times</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;Hello &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">person</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="nb">println</span><span class="p">(</span><span class="si">f&quot;Hello from {</span><span class="n">name</span><span class="si">}!&quot;</span><span class="p">)</span>
+<span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;Jake&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span>
+</code></pre></div>
+<p><code>vamp run hello.vp</code> builds <code>hello.exe</code> next to the file and runs it. <code>vamp hello.vp</code> only builds it.</p>
+<h2 id="where-to-go-next">Where to go next</h2>
+<div class="cards">
+<a class="card" href="types-variables-and-constants.html"><strong>Language basics</strong><span>Types, variables, functions, control flow and strings.</span></a>
+<a class="card" href="classes.html"><strong>Classes and types</strong><span>Classes, inheritance, interfaces, generics and optionals.</span></a>
+<a class="card" href="lists-and-maps.html"><strong>Collections</strong><span>Lists, maps, sets, tuples and slices.</span></a>
+<a class="card" href="standard-libraries.html"><strong>Standard libraries</strong><span>Math, files, JSON, threads, networking, regex and more.</span></a>
+<a class="card" href="the-os-library.html"><strong>Windows and interfaces</strong><span>Native windows, controls, events and drawing.</span></a>
+<a class="card" href="the-vamp-command.html"><strong>Tools</strong><span>The vamp command, VS Code, debugging and packages.</span></a>
+</div><div class="pager"><a class="next" href="source-files-and-comments.html"><span>Next</span>Source files and comments</a></div></article>
+    </main>
+    
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

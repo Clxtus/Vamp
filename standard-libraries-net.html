@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>net — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="current" href="standard-libraries.html">Standard libraries</a><ul><li><a class="" href="standard-libraries-math.html"><code>math</code></a></li><li><a class="" href="standard-libraries-random.html"><code>random</code></a></li><li><a class="" href="standard-libraries-time.html"><code>time</code></a></li><li><a class="" href="standard-libraries-file.html"><code>file</code></a></li><li><a class="" href="standard-libraries-console.html"><code>console</code></a></li><li><a class="" href="standard-libraries-json.html"><code>json</code></a></li><li><a class="" href="standard-libraries-thread.html"><code>thread</code></a></li><li><a class="current" href="standard-libraries-net.html"><code>net</code></a></li><li><a class="" href="standard-libraries-regex.html"><code>regex</code></a></li><li><a class="" href="standard-libraries-memory.html"><code>memory</code></a></li><li><a class="" href="standard-libraries-input.html"><code>input</code></a></li><li><a class="" href="standard-libraries-audio.html"><code>audio</code></a></li></ul></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> <a href="standard-libraries.html">Standard libraries</a> <span>&rsaquo;</span> <code>net</code></div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="net"><code>net</code></h1><div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">net</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">connection</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">net</span><span class="p">.</span><span class="nf">Connect</span><span class="p">(</span><span class="s2">&quot;example.com&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">80</span><span class="p">)</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">connection</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="k">throw</span><span class="p">(</span><span class="s2">&quot;could not connect&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="nn">net</span><span class="p">.</span><span class="nf">Send</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;GET / HTTP/1.0</span><span class="se">\n</span><span class="s2">Host: example.com</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="nn">net</span><span class="p">.</span><span class="nf">Receive</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span><span class="w"> </span><span class="mi">4096</span><span class="p">))</span>
+<span class="nn">net</span><span class="p">.</span><span class="nf">Close</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
+
+<span class="nb">println</span><span class="p">(</span><span class="nn">net</span><span class="p">.</span><span class="nf">Http_Get</span><span class="p">(</span><span class="s2">&quot;https://example.com/&quot;</span><span class="p">))</span>
+</code></pre></div>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net.Connect(host, port)</code></td>
+<td>Opens a TCP connection. Returns its number, or <code>0</code> on failure.</td>
+</tr>
+<tr>
+<td><code>net.Listen(port)</code></td>
+<td>Starts accepting TCP connections on a port. Returns the listener's number, or <code>0</code>.</td>
+</tr>
+<tr>
+<td><code>net.Accept(listener)</code></td>
+<td>Waits for a client and returns a connection to it, or <code>0</code>.</td>
+</tr>
+<tr>
+<td><code>net.Send(connection, text)</code></td>
+<td>Sends all of the text. Returns the number of bytes sent, or <code>-1</code>.</td>
+</tr>
+<tr>
+<td><code>net.Receive(connection, limit)</code></td>
+<td>Waits for data and returns up to <code>limit</code> bytes; <code>""</code> when the other side has closed the connection.</td>
+</tr>
+<tr>
+<td><code>net.Close(connection)</code></td>
+<td>Closes a connection or listener.</td>
+</tr>
+<tr>
+<td><code>net.Http_Get(url)</code></td>
+<td>Downloads an <code>http</code> or <code>https</code> address and returns the body as text. Raises an error on failure.</td>
+</tr>
+<tr>
+<td><code>net.Download(url, path)</code></td>
+<td>Downloads to a file; returns whether it succeeded.</td>
+</tr>
+<tr>
+<td><code>net.Http_Post(url, body, content_type)</code></td>
+<td>Sends <code>body</code> to an <code>http</code> or <code>https</code> address and returns the reply, e.g. <code>net.Http_Post(url, json.To_Text(doc), "application/json")</code>. Raises an error on failure.</td>
+</tr>
+<tr>
+<td><code>net.Set_Timeout(connection, milliseconds)</code></td>
+<td>Makes <code>Receive</code> and <code>Send</code> give up after the given time (<code>Receive</code> then returns <code>""</code>). Returns whether it was set.</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>Accept</code> and <code>Receive</code> wait, so a server usually runs them on a thread. Data is text, and a zero byte ends a received string.</p><div class="pager"><a class="previous" href="standard-libraries-thread.html"><span>Previous</span><code>thread</code></a><a class="next" href="standard-libraries-regex.html"><span>Next</span><code>regex</code></a></div></article>
+    </main>
+    
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

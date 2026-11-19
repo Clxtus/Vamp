@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The os library — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="current" href="the-os-library.html">The <code>os</code> library</a><ul class="local"><li><a href="#files-and-folders">Files and folders</a></li><li><a href="#programs-arguments-and-the-environment">Programs, arguments and the environment</a></li><li><a href="#windows">Windows</a></li></ul></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Windows and interfaces <span>&rsaquo;</span> The <code>os</code> library</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="the-os-library">The <code>os</code> library</h1><h2 id="files-and-folders">Files and folders</h2>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>os.Make_Directory(path)</code></td>
+<td>Creates the folder and any missing parent folders. Returns <code>0</code> on success or a Windows error code.</td>
+</tr>
+<tr>
+<td><code>os.Get_Directory(path)</code></td>
+<td>The absolute path of an existing folder; relative paths start from the working directory. On failure, it prints an error and returns <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>os.List_Directory(path)</code></td>
+<td>Prints the folder's entries one per line, omitting <code>.</code> and <code>..</code>. Returns the entry count, or <code>-1</code> on failure.</td>
+</tr>
+<tr>
+<td><code>os.Remove_Directory(path)</code></td>
+<td>Deletes a folder and its contents. Returns whether it succeeded.</td>
+</tr>
+<tr>
+<td><code>os.Directory_Exists(path)</code></td>
+<td>Whether the path exists and is a folder.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="programs-arguments-and-the-environment">Programs, arguments and the environment</h2>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>os.Args()</code></td>
+<td>The command line as a <code>list[str]</code>. The first entry is the program itself.</td>
+</tr>
+<tr>
+<td><code>os.Get_Env(name)</code></td>
+<td>An environment variable, or <code>""</code> if it is not set.</td>
+</tr>
+<tr>
+<td><code>os.Set_Env(name, value)</code>, <code>os.Env_Exists(name)</code></td>
+<td>Sets a variable for this program and the programs it starts; checks whether one exists.</td>
+</tr>
+<tr>
+<td><code>os.Run(command)</code></td>
+<td>Runs a command (as in the Windows command prompt), waits for it, and returns its exit code. Its output appears in the console.</td>
+</tr>
+<tr>
+<td><code>os.Run_Output(command)</code></td>
+<td>The same, but returns everything the command printed.</td>
+</tr>
+<tr>
+<td><code>os.Start_Process(command)</code></td>
+<td>Starts a command without waiting and returns its process number.</td>
+</tr>
+<tr>
+<td><code>os.Process_Running(id)</code>, <code>os.Wait_Process(id)</code>, <code>os.Kill_Process(id)</code></td>
+<td>Whether it is still running; wait for it and get its exit code; stop it.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">os</span>
+<span class="k">val</span><span class="w"> </span><span class="n">args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Args</span><span class="p">()</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">args</span><span class="p">.</span><span class="nf">length</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">println</span><span class="p">(</span><span class="s2">&quot;first argument: &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"> </span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="nn">os</span><span class="p">.</span><span class="nf">Run_Output</span><span class="p">(</span><span class="s2">&quot;git --version&quot;</span><span class="p">))</span>
+</code></pre></div>
+<h2 id="windows">Windows</h2>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">opened</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Window</span><span class="p">(</span><span class="s2">&quot;Demo&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">icon</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;assets/app.png&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">800</span><span class="p">,</span><span class="w"> </span><span class="mi">600</span><span class="p">),</span>
+<span class="w">    </span><span class="n">resizable</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Windowed&quot;</span>
+<span class="p">))</span>
+</code></pre></div>
+<p><code>os.Make_Window(title, settings)</code> creates a native Windows window and returns <code>true</code> on success. The settings are optional; the default is a resizable 800×600 window. Supported settings:</p>
+<ul>
+<li><code>icon = "path"</code>: an ICO, PNG or JPEG, resolved from the working directory (the folder the program runs from). Any <code>str</code> expression can be used. If the icon cannot be loaded, a warning is printed and the window opens without it.</li>
+<li><code>size = (width, height)</code>: positive whole numbers.</li>
+<li><code>resizable = true</code> or <code>false</code>.</li>
+<li><code>type = "Windowed"</code>, <code>"Full Screen"</code>, <code>"Maximized"</code> or <code>"Borderless"</code>.</li>
+<li><code>style = "classic"</code>, <code>"native"</code> (default) or <code>"modern"</code>: the appearance of the controls. See <a href="interface-styles.html#interface-styles">Interface styles</a>.</li>
+<li><code>theme = "light"</code>, <code>"dark"</code> or <code>"system"</code>: the colors of a <code>"modern"</code> window, including the title bar. <code>"system"</code> follows the Windows app theme. Only valid with <code>style = "modern"</code>.</li>
+</ul>
+<p>Other window functions:</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>os.Launch_Window(executable_path)</code></td>
+<td>Starts another program. Returns <code>true</code> if Windows accepts the launch.</td>
+</tr>
+<tr>
+<td><code>os.Remove_Window(title)</code></td>
+<td>Sends a close request to every visible window with that title; returns whether a request was sent.</td>
+</tr>
+<tr>
+<td><code>os.Get_Window(title)</code></td>
+<td>Whether a visible window with the matching title exists.</td>
+</tr>
+<tr>
+<td><code>os.List_Windows()</code></td>
+<td>Prints the titles of visible windows and returns their count.</td>
+</tr>
+<tr>
+<td><code>os.Sleep(milliseconds)</code></td>
+<td>Waits while still handling messages for Vamp windows. Use it to pace a loop. A negative duration prints an error and does not wait.</td>
+</tr>
+<tr>
+<td><code>os.Set_Window_Title(title, new_title)</code></td>
+<td>Renames the first visible window with that title; returns whether a window was renamed. A window created by the program remembers its original title, so its interface calls continue to use it.</td>
+</tr>
+<tr>
+<td><code>os.Resize_Window(title, width, height)</code></td>
+<td>Sets the outer size in pixels (both must be positive). Position and stacking are unchanged. Returns whether the window was resized.</td>
+</tr>
+<tr>
+<td><code>os.Move_Window(title, x, y)</code></td>
+<td>Moves the top-left corner to a screen position (negative values are valid on multi-monitor setups). Returns whether the window was moved.</td>
+</tr>
+<tr>
+<td><code>os.Minimize_Window(title)</code></td>
+<td>Minimizes the window. Returns whether it was found.</td>
+</tr>
+<tr>
+<td><code>os.Maximize_Window(title)</code></td>
+<td>Maximizes the window. Returns whether it was found.</td>
+</tr>
+<tr>
+<td><code>os.Restore_Window(title)</code></td>
+<td>Restores a minimized or maximized window to its normal size. Returns whether it was found.</td>
+</tr>
+<tr>
+<td><code>os.Focus_Window(title)</code></td>
+<td>Restores the window if it is minimized and asks Windows to bring it to the front. Returns whether Windows accepted the request; it may refuse for another program's window.</td>
+</tr>
+<tr>
+<td><code>os.Set_Window_Icon(title, path)</code></td>
+<td>Sets the title bar and taskbar icon from an ICO, PNG or JPEG. Returns whether the icon loaded and was applied.</td>
+</tr>
+<tr>
+<td><code>os.Get_Window_Width(title)</code>, <code>os.Get_Window_Height(title)</code></td>
+<td>The outer size in pixels, or <code>-1</code> if there is no visible window with that title.</td>
+</tr>
+<tr>
+<td><code>os.Get_Window_X(title)</code>, <code>os.Get_Window_Y(title)</code></td>
+<td>The top-left screen position, or <code>-1</code> when there is no such window. (A window can also be positioned at <code>-1</code>.)</td>
+</tr>
+<tr>
+<td><code>os.Window_Minimized(title)</code>, <code>os.Window_Maximized(title)</code></td>
+<td>Whether the window is minimized or maximized; <code>false</code> if there is no such window.</td>
+</tr>
+</tbody>
+</table></div>
+<p>All window functions identify windows by title, not by process name. Titles are matched case-insensitively against visible windows, and the first match is used (<code>os.Remove_Window</code> hits every match). A window created by the program stays open while the program runs and keeps it alive until the window is closed.</p><div class="pager"><a class="previous" href="standard-libraries-audio.html"><span>Previous</span><code>audio</code></a><a class="next" href="interface-styles.html"><span>Next</span>Interface styles</a></div></article>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li class="level-2"><a href="#files-and-folders">Files and folders</a></li><li class="level-2"><a href="#programs-arguments-and-the-environment">Programs, arguments and the environment</a></li><li class="level-2"><a href="#windows">Windows</a></li></ul></aside>
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

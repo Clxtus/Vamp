@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interface groups — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="" href="strings.html">Strings</a></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="current" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Windows and interfaces <span>&rsaquo;</span> Interface groups</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="interface-groups">Interface groups</h1><p>A group is a named set of controls in one window, such as a HUD or a pause menu. Group functions act on every control in the group at once, so switching screens does not require listing each control.</p>
+<p>A control is added to a group with the <code>group</code> property at creation, or later with <code>os.Set_Interface_Group</code>:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">import</span><span class="w"> </span><span class="n">os</span>
+<span class="k">import</span><span class="w"> </span><span class="n">input</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">window</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Window</span><span class="p">(</span><span class="s2">&quot;Game&quot;</span><span class="p">)</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">score</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;score&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">120</span><span class="p">,</span><span class="w"> </span><span class="mi">30</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Score: 0&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">group</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;hud&quot;</span>
+<span class="p">))</span>
+<span class="k">val</span><span class="w"> </span><span class="n">lives</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;label&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;lives&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">120</span><span class="p">,</span><span class="w"> </span><span class="mi">30</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">45</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Lives: 3&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">group</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;hud&quot;</span>
+<span class="p">))</span>
+<span class="k">val</span><span class="w"> </span><span class="n">resume</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;button&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">160</span><span class="p">,</span><span class="w"> </span><span class="mi">40</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">320</span><span class="p">,</span><span class="w"> </span><span class="mi">200</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Resume&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">visible</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="n">group</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pause&quot;</span>
+<span class="p">))</span>
+<span class="k">val</span><span class="w"> </span><span class="n">quit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">os</span><span class="p">.</span><span class="nf">Make_Interface</span><span class="p">(</span><span class="s2">&quot;button&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;quit&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">160</span><span class="p">,</span><span class="w"> </span><span class="mi">40</span><span class="p">),</span>
+<span class="w">    </span><span class="n">position</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">320</span><span class="p">,</span><span class="w"> </span><span class="mi">250</span><span class="p">),</span>
+<span class="w">    </span><span class="n">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Quit&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">visible</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="n">group</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pause&quot;</span>
+<span class="p">))</span>
+
+<span class="k">val</span><span class="w"> </span><span class="n">paused</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="kc">true</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nn">input</span><span class="p">.</span><span class="nf">Key_Pressed</span><span class="p">(</span><span class="s2">&quot;ESCAPE&quot;</span><span class="p">)</span><span class="w"> </span><span class="ow">and</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="n">paused</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">        </span><span class="n">paused</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="nn">os</span><span class="p">.</span><span class="nf">Switch_Interface_Group</span><span class="p">(</span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;pause&quot;</span><span class="p">)</span><span class="w">      </span><span class="c1">// show the pause menu, hide the HUD</span>
+<span class="w">    </span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nn">os</span><span class="p">.</span><span class="nf">Interface_Clicked</span><span class="p">(</span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span>
+<span class="w">        </span><span class="n">paused</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+<span class="w">        </span><span class="nn">os</span><span class="p">.</span><span class="nf">Switch_Interface_Group</span><span class="p">(</span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;hud&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="p">)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nn">os</span><span class="p">.</span><span class="nf">Interface_Clicked</span><span class="p">(</span><span class="s2">&quot;Game&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;quit&quot;</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="nb">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="w">    </span><span class="nn">os</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>os.Make_Interface_Group(window_title, group)</code></td>
+<td>Declares an empty group. This is not needed for a group already used in a <code>group</code> property or <code>os.Set_Interface_Group</code>. Returns <code>true</code>.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Group(window_title, name, group)</code></td>
+<td>Moves the control into the group, leaving its previous group. An empty name <code>""</code> removes it from every group. Returns whether the control exists.</td>
+</tr>
+<tr>
+<td><code>os.Interface_In_Group(window_title, name, group)</code></td>
+<td>Whether the control is currently in the group.</td>
+</tr>
+<tr>
+<td><code>os.Show_Interface_Group(window_title, group)</code>, <code>os.Hide_Interface_Group(window_title, group)</code></td>
+<td>Shows or hides every control in the group.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Group_Visible(window_title, group, visible)</code></td>
+<td>The same, with a <code>bool</code>.</td>
+</tr>
+<tr>
+<td><code>os.Switch_Interface_Group(window_title, group)</code></td>
+<td>Shows this group's controls and hides every other group in the window. Controls that are in no group are left unchanged.</td>
+</tr>
+<tr>
+<td><code>os.Set_Interface_Group_Enabled(window_title, group, enabled)</code></td>
+<td>Enables or disables every control in the group.</td>
+</tr>
+<tr>
+<td><code>os.Move_Interface_Group(window_title, group, dx, dy)</code></td>
+<td>Moves every control in the group by <code>dx</code> and <code>dy</code> pixels.</td>
+</tr>
+<tr>
+<td><code>os.Remove_Interface_Group(window_title, group)</code></td>
+<td>Destroys every control in the group, like <code>os.Remove_Interface</code> does for one. The group itself can be filled again.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Functions that act on a group return the number of controls they changed, as an <code>int</code> (<code>0</code> for an empty group).</p>
+<p>Rules:</p>
+<ul>
+<li>A control is in at most one group. A group belongs to one window, so two windows can each have a group named <code>"hud"</code>.</li>
+<li>Window titles, control names and group names must be string literals, as with every interface function.</li>
+<li>A group name that no control ever joins and that <code>os.Make_Interface_Group</code> never declares is a compile error, which catches misspelled names.</li>
+<li>A control removed with <code>os.Remove_Interface</code> leaves its group.</li>
+<li>Group functions use the same safe messaging as single-control functions, with one message per control.</li>
+</ul><div class="pager"><a class="previous" href="changing-querying-and-removing-interfaces.html"><span>Previous</span>Changing, querying, and removing interfaces</a><a class="next" href="events.html"><span>Next</span>Events</a></div></article>
+    </main>
+    
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strings — Vamp documentation</title>
+<link rel="icon" href="_static/icon.png">
+<link rel="stylesheet" href="_static/style.css?v=dc83612faf">
+<script>try{var t=localStorage.getItem("vamp-theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+
+</head>
+<body>
+<header class="mobile-bar">
+  <button class="menu" type="button" aria-label="Open the menu">&#9776;</button>
+  <a class="brand" href="index.html"><img src="_static/icon.png" alt="">Vamp</a>
+</header>
+<nav class="sidebar" aria-label="Documentation">
+  <div class="sidebar-top">
+    <a class="brand" href="index.html"><img src="_static/icon.png" alt=""><span>Vamp</span></a>
+    <div class="version">latest</div>
+    <form class="search" action="search.html" role="search">
+      <input type="search" name="q" placeholder="Search docs" aria-label="Search the documentation" autocomplete="off">
+      <div class="search-results" hidden></div>
+    </form>
+  </div>
+  <div class="sidebar-nav"><p class="caption">Getting started</p><ul><li><a class="" href="index.html">Vamp documentation</a></li></ul><p class="caption">Language</p><ul><li><a class="" href="source-files-and-comments.html">Source files and comments</a></li><li><a class="" href="types-variables-and-constants.html">Types, variables, and constants</a></li><li><a class="" href="expressions-and-assignment.html">Expressions and assignment</a></li><li><a class="" href="functions-and-returns.html">Functions and returns</a></li><li><a class="" href="control-flow.html">Control flow</a></li><li><a class="current" href="strings.html">Strings</a><ul class="local"><li><a href="#formatted-strings">Formatted strings</a></li><li><a href="#building-long-text">Building long text</a></li></ul></li><li><a class="" href="enums.html">Enums</a></li></ul><p class="caption">Collections</p><ul><li><a class="" href="arrays-and-dictionaries.html">Arrays and dictionaries</a></li><li><a class="" href="lists-and-maps.html">Lists and maps</a></li></ul><p class="caption">Classes and types</p><ul><li><a class="" href="classes.html">Classes</a></li><li><a class="" href="optional-values-and-none.html">Optional values and <code>none</code></a></li></ul><p class="caption">Program structure</p><ul><li><a class="" href="error-handling.html">Error handling</a></li><li><a class="" href="tests.html">Tests</a></li><li><a class="" href="console-output-and-program-exit.html">Console output and program exit</a></li><li><a class="" href="imports.html">Imports</a></li></ul><p class="caption">Memory and performance</p><ul><li><a class="" href="memory.html">Memory</a></li><li><a class="" href="limits.html">Limits</a></li></ul><p class="caption">Standard libraries</p><ul><li><a class="" href="standard-libraries.html">Standard libraries</a></li></ul><p class="caption">Windows and interfaces</p><ul><li><a class="" href="the-os-library.html">The <code>os</code> library</a></li><li><a class="" href="interface-styles.html">Interface styles</a></li><li><a class="" href="native-interface-controls.html">Native interface controls</a></li><li><a class="" href="changing-querying-and-removing-interfaces.html">Changing, querying, and removing interfaces</a></li><li><a class="" href="interface-groups.html">Interface groups</a></li><li><a class="" href="events.html">Events</a></li><li><a class="" href="drawing-on-a-canvas.html">Drawing on a canvas</a></li></ul><p class="caption">Tools</p><ul><li><a class="" href="the-vamp-command.html">The <code>vamp</code> command</a></li><li><a class="" href="editor-support-and-debugging.html">Editor support and debugging</a></li></ul></div>
+</nav>
+<div class="page">
+  <div class="topbar">
+    <div class="crumbs"><a href="index.html">Docs</a> <span>&rsaquo;</span> Language <span>&rsaquo;</span> Strings</div>
+    <div class="actions">
+      <a href="https://github.com/Clxtus/Vamp" class="edit">GitHub</a>
+      <button class="theme" type="button" aria-label="Switch between light and dark">&#9681;</button>
+    </div>
+  </div>
+  <div class="columns">
+    <main class="content">
+<article class="doc"><h1 id="strings">Strings</h1><p><code>+</code> joins strings, and <code>str(value)</code> turns any number, <code>bool</code>, <code>char</code> or enum into text. <code>text[index]</code> reads one character as a <code>char</code>. <code>len(text)</code> is the length in bytes.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text.length()</code></td>
+<td>Length in bytes.</td>
+</tr>
+<tr>
+<td><code>text.upper()</code>, <code>text.lower()</code></td>
+<td>Upper or lower case copy.</td>
+</tr>
+<tr>
+<td><code>text.trim()</code></td>
+<td>Copy with spaces, tabs and new lines cut off both ends.</td>
+</tr>
+<tr>
+<td><code>text.contains(part)</code>, <code>text.starts_with(part)</code>, <code>text.ends_with(part)</code></td>
+<td><code>bool</code>.</td>
+</tr>
+<tr>
+<td><code>text.find(part)</code></td>
+<td>Index of the first match, or <code>-1</code>.</td>
+</tr>
+<tr>
+<td><code>text.replace(from, to)</code></td>
+<td>Copy with every <code>from</code> swapped for <code>to</code>.</td>
+</tr>
+<tr>
+<td><code>text.split(separator)</code></td>
+<td>The pieces as a <code>list[str]</code>. An empty separator splits into single characters.</td>
+</tr>
+<tr>
+<td><code>text.substring(start, count)</code></td>
+<td><code>count</code> characters starting at <code>start</code>; a negative <code>count</code> means "to the end".</td>
+</tr>
+<tr>
+<td><code>text.repeat(times)</code>, <code>text.reverse()</code></td>
+<td>Repeated or reversed copy (<code>reverse</code> keeps characters like <code>é</code> in one piece).</td>
+</tr>
+<tr>
+<td><code>text.char_at(index)</code></td>
+<td>Same as <code>text[index]</code>.</td>
+</tr>
+<tr>
+<td><code>text.is_number()</code></td>
+<td>Whether <code>int(...)</code> or <code>float(...)</code> can convert it.</td>
+</tr>
+<tr>
+<td><code>text.char_count()</code></td>
+<td>Number of characters, counting multi-byte ones like <code>é</code> once.</td>
+</tr>
+<tr>
+<td><code>text.chars()</code></td>
+<td>A <code>list[str]</code> with one entry per character (UTF-8 aware).</td>
+</tr>
+<tr>
+<td><code>text.code_points()</code></td>
+<td>Each character's Unicode number, as a <code>list[int]</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;  name = Emma  &quot;</span>
+<span class="k">val</span><span class="w"> </span><span class="n">parts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">line</span><span class="p">.</span><span class="nf">trim</span><span class="p">().</span><span class="nf">split</span><span class="p">(</span><span class="s2">&quot; = &quot;</span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="nf">upper</span><span class="p">())</span><span class="w">          </span><span class="c1">// EMMA</span>
+</code></pre></div>
+<p>String methods always return a new string and never modify the original. <code>text[start:end]</code> slices text the same way as lists.</p>
+<h2 id="formatted-strings">Formatted strings</h2>
+<p>Prefixing a string with <code>f</code> allows values to be inserted with <code>{ }</code>. Any expression can be used, optionally followed by a format after <code>:</code>: a width, an alignment (<code>&lt;</code> left, <code>&gt;</code> right, <code>^</code> centre) and, for floats, how many decimals.</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;Emma&quot;</span>
+<span class="k">val</span><span class="w"> </span><span class="n">price</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="kt">float</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">3.14159</span>
+<span class="nb">println</span><span class="p">(</span><span class="si">f&quot;{</span><span class="n">name</span><span class="si">} owes {</span><span class="n">price</span><span class="p">:.</span><span class="mi">2</span><span class="si">}&quot;</span><span class="p">)</span><span class="w">              </span><span class="c1">// Emma owes 3.14</span>
+<span class="nb">println</span><span class="p">(</span><span class="si">f&quot;|{</span><span class="n">name</span><span class="p">:</span><span class="o">&lt;</span><span class="mi">6</span><span class="si">}|{</span><span class="n">price</span><span class="p">:</span><span class="o">&gt;</span><span class="mf">8.1</span><span class="si">}|&quot;</span><span class="p">)</span><span class="w">           </span><span class="c1">// |Emma  |     3.1|</span>
+<span class="nb">println</span><span class="p">(</span><span class="si">f&quot;{</span><span class="p">{</span><span class="n">braces</span><span class="si">}} and {</span><span class="n">name</span><span class="p">.</span><span class="nf">upper</span><span class="p">()</span><span class="si">}&quot;</span><span class="p">)</span><span class="w">       </span><span class="c1">// {braces} and EMMA</span>
+</code></pre></div>
+<p><code>{{</code> and <code>}}</code> produce literal braces. Quotes inside the braces are written <code>\"</code>, same as anywhere else in a string.</p>
+<h2 id="building-long-text">Building long text</h2>
+<p>Joining many pieces with <code>+</code> copies the entire text each time. A <code>builder</code> collects the pieces and builds the text once:</p>
+<div class="code" data-language="Vamp"><button class="copy" type="button" aria-label="Copy code">Copy</button><pre><code><span class="k">val</span><span class="w"> </span><span class="n">report</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">builder</span><span class="p">()</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">))</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="p">(</span><span class="w"> </span><span class="n">report</span><span class="p">.</span><span class="nf">add_line</span><span class="p">(</span><span class="si">f&quot;row {</span><span class="n">i</span><span class="si">}&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">)</span>
+<span class="nb">println</span><span class="p">(</span><span class="n">report</span><span class="p">.</span><span class="nf">text</span><span class="p">().</span><span class="nf">length</span><span class="p">())</span>
+</code></pre></div>
+<p><code>add(value)</code> appends any value (numbers and other types are converted), <code>add_line(value)</code> also appends a new line (<code>add_line()</code> alone adds only the new line), <code>text()</code> returns the text, <code>length()</code> its length and <code>clear()</code> empties it.</p><div class="pager"><a class="previous" href="control-flow.html"><span>Previous</span>Control flow</a><a class="next" href="enums.html"><span>Next</span>Enums</a></div></article>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li class="level-2"><a href="#formatted-strings">Formatted strings</a></li><li class="level-2"><a href="#building-long-text">Building long text</a></li></ul></aside>
+  </div>
+  <footer>
+    &copy; 2026 Clxtus &middot; Vamp is released under the <a href="https://github.com/Clxtus/Vamp/blob/main/LICENSE">MIT License</a>
+    &middot; <a href="https://github.com/Clxtus/Vamp">Source on GitHub</a>
+  </footer>
+</div>
+<script src="_static/search-index.js?v=dc83612faf"></script>
+<script src="_static/docs.js?v=dc83612faf"></script>
+</body>
+</html>
